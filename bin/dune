@@ -2,5 +2,5 @@
  (public_name belot)
  (name main)
  (preprocess
- (pps ppx_deriving.show))
- (libraries belot))
+ (pps ppx_deriving.show ppx_deriving.enum))
+ (libraries belot core fmt))
