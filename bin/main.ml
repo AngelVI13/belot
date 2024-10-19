@@ -1,11 +1,13 @@
 (* open Base;;*)
 open Core
 
-type csuite = SClubs | SDiamonds | SHearts | SSpades [@@deriving show, enum]
+type csuite = SClubs | SDiamonds | SHearts | SSpades [@@deriving show]
+
 type cgame = GClubs | GDiamonds | GHearts | GSpades | GNoTrumps | GAllTrumps
+[@@deriving show, enum]
 
 type cvalue = Seven | Eight | Nine | Ten | Jack | Queen | King | Ace
-[@@deriving show, enum]
+[@@deriving show]
 
 type ccombination =
   | Belot
@@ -90,18 +92,43 @@ let rec make_suites suites values cards =
   | suite :: suites ->
       make_suites suites values (cards @ make_cards_for_suite suite values [])
 
-let make_deck =
-  let suites = [ SClubs; SDiamonds; SHearts; SSpades ] in
-  let values = [ Seven; Eight; Nine; Ten; Jack; Queen; King; Ace ] in
-  make_suites suites values []
+module Deck : sig
+  type t
 
-let shuffle_deck deck =
-  let new_deck = List.map ~f:(fun card -> (Random.bits (), card)) deck in
-  let sorted_deck =
-    List.sort new_deck ~compare:(fun (a, _) (b, _) -> if a < b then -1 else 1)
-  in
-  List.map sorted_deck ~f:(fun (_, card) -> card)
+  val make : t
+  val shuffle : t -> t
+  val print : t -> unit
+end = struct
+  type t = card list
+
+  let make =
+    let suites = [ SClubs; SDiamonds; SHearts; SSpades ] in
+    let values = [ Seven; Eight; Nine; Ten; Jack; Queen; King; Ace ] in
+    make_suites suites values []
+
+  let shuffle deck =
+    let new_deck = List.map ~f:(fun card -> (Random.bits (), card)) deck in
+    let sorted_deck =
+      List.sort new_deck ~compare:(fun (a, _) (b, _) -> if a < b then -1 else 1)
+    in
+    List.map sorted_deck ~f:(fun (_, card) -> card)
+
+  let print deck = List.iter ~f:(fun v -> print_endline @@ show_card v) deck
+end
+
+type team = One | Two [@@deriving show, enum]
+
+type player = {
+  name : string;
+  cards : card list;
+  announce : cgame option;
+  points : int;
+  team : int;
+}
+[@@deriving show]
 
 let () =
-  let deck = make_deck |> shuffle_deck in
-  List.iter ~f:(fun v -> print_endline @@ show_card v) deck
+  Random.self_init ();
+  (* randomizes random calls every run *)
+  let deck = Deck.make |> Deck.shuffle in
+  Deck.print deck
