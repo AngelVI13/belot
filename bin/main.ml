@@ -132,7 +132,8 @@ end = struct
       deal_aux deck num_cards []
 end
 
-type team = One | Two [@@deriving show, enum]
+type team = NorthSouth | EastWest [@@deriving show, enum]
+type player_pos = North | West | South | East [@@deriving show, enum]
 
 type player = {
   name : string;
@@ -140,6 +141,7 @@ type player = {
   announce : cgame option;
   points : int;
   team : int;
+  pos : player_pos;
 }
 [@@deriving show]
 
