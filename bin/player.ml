@@ -1,0 +1,25 @@
+open Core
+open Defs
+
+type t = {
+  name : string;
+  cards : Card.t list;
+  announce : cgame option;
+  points : int;
+  partner : player_pos;
+  pos : player_pos;
+  type_ : player_type;
+}
+
+let show = failwith "not implemented"
+
+let make player_pos =
+  {
+    name = show_player_pos player_pos;
+    cards = [];
+    announce = None;
+    points = 0;
+    partner = partner player_pos;
+    pos = player_pos;
+    type_ = Machine;
+  }
