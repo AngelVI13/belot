@@ -23,3 +23,5 @@ let make player_pos =
     pos = player_pos;
     type_ = Machine;
   }
+
+let store_cards player cards = { player with cards = cards @ player.cards }

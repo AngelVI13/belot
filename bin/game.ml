@@ -46,7 +46,21 @@ let finished game =
 let do_shuffle game =
   { game with deck = Deck.shuffle game.deck; state = SDealPreBid }
 
-let do_deal_pre_bid game = { game with state = SBidding }
+let do_deal_pre_bid game =
+  let rec deal players card_num deck new_players =
+    match players with
+    | [] -> (new_players, deck)
+    | p :: players ->
+        let cards, deck = Result.ok_or_failwith (Deck.deal deck card_num) in
+        let player = Player.store_cards p (Deck.to_cards cards) in
+        deal players card_num deck (player :: new_players)
+  in
+
+  (* first deal every player 3 cards then deal every player 2 cards *)
+  let players, deck = deal game.players 3 game.deck [] in
+  let players, deck = deal players 2 deck [] in
+  { game with state = SBidding; players; deck }
+
 let do_bidding game = { game with state = SDealRest }
 let do_deal_rest game = { game with state = SPlay }
 let do_play game = { game with state = SCalcScore }

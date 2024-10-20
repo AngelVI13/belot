@@ -43,3 +43,5 @@ let deal deck num_cards =
       | [] -> Ok (cards, deck)
     in
     deal_aux deck num_cards []
+
+let to_cards deck = deck
