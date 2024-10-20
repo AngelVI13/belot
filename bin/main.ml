@@ -98,6 +98,7 @@ module Deck : sig
   val make : t
   val shuffle : t -> t
   val print : t -> unit
+  val deal : t -> int -> (t * t, string) result
 end = struct
   type t = card list
 
@@ -114,6 +115,21 @@ end = struct
     List.map sorted_deck ~f:(fun (_, card) -> card)
 
   let print deck = List.iter ~f:(fun v -> print_endline @@ show_card v) deck
+
+  let rec deal deck num_cards =
+    let cards_in_deck = List.length deck in
+    if num_cards < 0 || cards_in_deck < num_cards then
+      Result.Error
+        (Printf.sprintf "Can't deal %d cards. Number of cards in deck %d"
+           num_cards cards_in_deck)
+    else
+      let rec deal_aux deck num_cards cards =
+        match deck with
+        | _ :: _ when num_cards = 0 -> Ok (cards, deck)
+        | card :: deck -> deal_aux deck (num_cards - 1) (card :: cards)
+        | [] -> Ok (cards, deck)
+      in
+      deal_aux deck num_cards []
 end
 
 type team = One | Two [@@deriving show, enum]
@@ -128,7 +144,9 @@ type player = {
 [@@deriving show]
 
 let () =
-  Random.self_init ();
   (* randomizes random calls every run *)
+  Random.self_init ();
   let deck = Deck.make |> Deck.shuffle in
-  Deck.print deck
+  match Deck.deal deck 3 with
+  | Ok (hand, _) -> Deck.print hand
+  | Error msg -> print_endline msg
