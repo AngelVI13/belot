@@ -15,6 +15,7 @@ type t = {
   players : Player.t list;
   teams : Team.t list;
   state : game_state;
+  chosen_game : cgame option;
   deck : Deck.t;
 }
 
@@ -34,7 +35,13 @@ let make_teams =
 
 let make =
   let players = make_players in
-  { players; teams = make_teams; state = SShuffle; deck = Deck.make }
+  {
+    players;
+    teams = make_teams;
+    state = SShuffle;
+    deck = Deck.make;
+    chosen_game = None;
+  }
 
 let show game = sprintf "game: %d" @@ List.length game.players
 
@@ -44,7 +51,9 @@ let finished game =
   | _ -> failwithf "not enough teams %d" (List.length game.teams) ()
 
 let do_shuffle game =
-  { game with deck = Deck.shuffle game.deck; state = SDealPreBid }
+  let players = List.map game.players ~f:(fun p -> Player.new_round p) in
+  let deck = Deck.make |> Deck.shuffle in
+  { game with deck; players; chosen_game = None; state = SDealPreBid }
 
 let do_deal_pre_bid game =
   let rec deal players card_num deck new_players =
@@ -61,7 +70,16 @@ let do_deal_pre_bid game =
   let players, deck = deal players 2 deck [] in
   { game with state = SBidding; players; deck }
 
-let do_bidding game = { game with state = SDealRest }
+let do_bidding game =
+  (* TODO: bidding logic goes here *)
+  let rec bid players current_bid bidder = None in
+
+  (* if no bid has been made -> go to next round *)
+  let chosen_game = bid game.players None None in
+  let state = match chosen_game with Some g -> SDealRest | None -> SShuffle in
+
+  { game with state; chosen_game }
+
 let do_deal_rest game = { game with state = SPlay }
 let do_play game = { game with state = SCalcScore }
 let do_calc_score game = { game with state = SShuffle }

@@ -25,3 +25,4 @@ let make player_pos =
   }
 
 let store_cards player cards = { player with cards = cards @ player.cards }
+let new_round player = { player with cards = []; announce = None }
