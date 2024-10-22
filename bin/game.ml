@@ -70,6 +70,54 @@ let do_deal_pre_bid game =
   let players, deck = deal players 2 deck [] in
   { game with state = SBidding; players; deck }
 
+(* NOTE: these do not account for combination score *)
+let color_game_score trump_suite card card_value =
+  let is_trump = Card.is_trump card trump_suite in
+  if is_trump then trump_worth card_value else no_trump_worth card_value
+
+let no_trumps_score card card_value = no_trump_worth card_value
+let all_trumps_score card card_value = trump_worth card_value
+
+let calc_card_score cards ~score_f =
+  let rec count_score cards score =
+    match cards with
+    | card :: cards ->
+        let card_value = Card.value card in
+        let card_score = score_f card card_value in
+        count_score cards (score + card_score)
+    | [] -> score
+  in
+  count_score cards 0
+
+let cards_score cards chosen_game =
+  match chosen_game with
+  | GSpades -> calc_card_score cards ~score_f:(color_game_score SSpades)
+  | GDiamonds -> calc_card_score cards ~score_f:(color_game_score SDiamonds)
+  | GHearts -> calc_card_score cards ~score_f:(color_game_score SHearts)
+  | GClubs -> calc_card_score cards ~score_f:(color_game_score SClubs)
+  | GNoTrumps -> calc_card_score cards ~score_f:no_trumps_score
+  | GAllTrumps -> calc_card_score cards ~score_f:all_trumps_score
+
+let best_bid cards =
+  assert (List.length cards = 5);
+
+  let possible_games =
+    [ GSpades; GDiamonds; GHearts; GClubs; GNoTrumps; GAllTrumps ]
+  in
+  let game_scores =
+    List.map possible_games ~f:(fun game ->
+        ( float_of_int (cards_score cards game)
+          /. float_of_int (five_cards_max_score game),
+          game ))
+  in
+  (* sort in descending order *)
+  let sorted_scores =
+    List.sort game_scores ~compare:(fun (score1, _) (score2, _) ->
+        if Float.(score1 < score2) then 1 else -1)
+  in
+  let best_score, best_game = List.nth_exn sorted_scores 0 in
+  if Float.(best_score > 0.5) then Some best_game else None
+
 let do_bidding game =
   (* TODO: bidding logic goes here *)
   let rec bid players current_bid bidder = None in

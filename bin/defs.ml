@@ -83,3 +83,12 @@ let partner = function
   | West -> East
   | South -> North
   | East -> West
+
+let five_cards_max_score = function
+  (* J 9 A trumps +  A A non trumps = 67 *)
+  | GClubs | GDiamonds | GHearts | GSpades ->
+      trump_worth Jack + trump_worth Nine + (3 * no_trump_worth Ace)
+  (* A A A A 10 = 54 *)
+  | GNoTrumps -> (4 * no_trump_worth Ace) + no_trump_worth Ten
+  (* J J J J 9 = 94 *)
+  | GAllTrumps -> (4 * trump_worth Jack) + trump_worth Nine
