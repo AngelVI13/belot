@@ -13,9 +13,12 @@ type game_state =
 
 type t = {
   players : Player.t list;
+  dealer_idx : int;
   teams : Team.t list;
   state : game_state;
   chosen_game : cgame option;
+  bidder : Team.t option;
+  counter : ccounter;
   deck : Deck.t;
 }
 
@@ -37,10 +40,13 @@ let make =
   let players = make_players in
   {
     players;
+    dealer_idx = 0;
     teams = make_teams;
     state = SShuffle;
     deck = Deck.make;
     chosen_game = None;
+    bidder = None;
+    counter = CNo;
   }
 
 let show game = sprintf "game: %d" @@ List.length game.players
@@ -50,10 +56,22 @@ let finished game =
   | team1 :: team2 :: _ -> Team.points team1 > 141 || Team.points team2 > 141
   | _ -> failwithf "not enough teams %d" (List.length game.teams) ()
 
+let next_player_idx idx = (idx + 1) % 4
+
 let do_shuffle game =
   let players = List.map game.players ~f:(fun p -> Player.new_round p) in
+  let dealer_idx = next_player_idx game.dealer_idx in
   let deck = Deck.make |> Deck.shuffle in
-  { game with deck; players; chosen_game = None; state = SDealPreBid }
+  {
+    game with
+    deck;
+    players;
+    dealer_idx;
+    chosen_game = None;
+    bidder = None;
+    state = SDealPreBid;
+    counter = CNo;
+  }
 
 let do_deal_pre_bid game =
   let rec deal players card_num deck new_players =
@@ -98,20 +116,6 @@ let cards_score cards chosen_game =
   | GNoTrumps -> calc_card_score cards ~score_f:no_trumps_score
   | GAllTrumps -> calc_card_score cards ~score_f:all_trumps_score
 
-let%expect_test "cards_score:spades_game" =
-  let cards =
-    [
-      Card.make SSpades Jack;
-      Card.make SSpades Nine;
-      Card.make SSpades Ace;
-      Card.make SHearts Nine;
-      Card.make SHearts Jack;
-    ]
-  in
-  let score = cards_score cards GSpades in
-  printf "---%d---" score;
-  [%expect {| |}]
-
 let best_bid cards =
   assert (List.length cards = 5);
 
@@ -134,17 +138,26 @@ let best_bid cards =
   if Float.(best_score > 0.5) then Some best_game else None
 
 let do_bidding game =
-  (* TODO: bidding logic goes here *)
-  let rec bid players current_bid bidder =
-    let _ = (players, current_bid, bidder) in
-    None
+  (* TODO: add exit condition at top of this function. When number of passes == 4*)
+  (* TODO: add check that each player can only place higher bid that current bid *)
+  (* TODO: add support for counter and re-counter *)
+  let rec bid player_idx current_bid bidder counter num_passes =
+    let player = List.nth_exn game.players player_idx in
+    let player_bid = best_bid (Player.cards player) in
+    match player_bid with
+    | None -> bid (next_player_idx player_idx) None None CNo (num_passes + 1)
+    | Some b -> (current_bid, bidder, counter)
+  in
+
+  (* start bidding from the person east of the dealer *)
+  let chosen_game, bidder, counter =
+    bid (next_player_idx game.dealer_idx) None None CNo 0
   in
 
   (* if no bid has been made -> go to next round *)
-  let chosen_game = bid game.players None None in
   let state = match chosen_game with Some _ -> SDealRest | None -> SShuffle in
 
-  { game with state; chosen_game }
+  { game with state; chosen_game; bidder; counter }
 
 let do_deal_rest game = { game with state = SPlay }
 let do_play game = { game with state = SCalcScore }
@@ -259,3 +272,17 @@ let test_best_bid =
 let run_tests _game =
   test_cards_score;
   test_best_bid
+
+let%expect_test "cards_score:spades_game" =
+  let cards =
+    [
+      Card.make SSpades Jack;
+      Card.make SSpades Nine;
+      Card.make SSpades Ace;
+      Card.make SHearts Nine;
+      Card.make SHearts Jack;
+    ]
+  in
+  let score = cards_score cards GSpades in
+  printf "---%d---" score;
+  [%expect {| |}]
