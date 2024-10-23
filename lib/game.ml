@@ -1,5 +1,6 @@
 open! Core
 open Defs
+open! Poly
 
 type game_state =
   | SShuffle
@@ -128,6 +129,7 @@ let best_bid cards =
     List.sort game_scores ~compare:(fun (score1, _) (score2, _) ->
         if Float.(score1 < score2) then 1 else -1)
   in
+  (*List.iter sorted_scores ~f:(fun (s, g) -> printf "%f %s\n" s (show_cgame g));*)
   let best_score, best_game = List.nth_exn sorted_scores 0 in
   if Float.(best_score > 0.5) then Some best_game else None
 
@@ -162,10 +164,47 @@ let rec play game =
     in
     play game
 
+(* improve this assert to be actually useful to print left and right values *)
 let fassert cond msg = if cond then () else failwith msg
 
-let run_tests _game =
-  let cards_score_spades_game =
+let test_cards_score =
+  let cards =
+    [
+      Card.make SSpades Jack;
+      Card.make SSpades Nine;
+      Card.make SSpades Ace;
+      Card.make SHearts Nine;
+      Card.make SHearts Jack;
+    ]
+  in
+
+  let test_cards_score_spades_game =
+    let score = cards_score cards GSpades in
+    fassert (score = 47)
+      (sprintf "%d = 47: wrong score for a spades game" score)
+  in
+  let test_cards_score_diamonds_game =
+    let score = cards_score cards GDiamonds in
+    fassert (score = 15)
+      (sprintf "%d = 47: wrong score for a spades game" score)
+  in
+  let test_cards_score_no_trumps_game =
+    let score = cards_score cards GNoTrumps in
+    fassert (score = 15)
+      (sprintf "%d = 15: wrong score for a no trumps game" score)
+  in
+  let test_cards_score_all_trumps_game =
+    let score = cards_score cards GAllTrumps in
+    fassert (score = 79)
+      (sprintf "%d = 79: wrong score for a all trumps game" score)
+  in
+  test_cards_score_spades_game;
+  test_cards_score_diamonds_game;
+  test_cards_score_no_trumps_game;
+  test_cards_score_all_trumps_game
+
+let test_best_bid =
+  let test_best_bid_all_trumps =
     let cards =
       [
         Card.make SSpades Jack;
@@ -175,8 +214,48 @@ let run_tests _game =
         Card.make SHearts Jack;
       ]
     in
-    let score = cards_score cards GSpades in
-    fassert (score = 19) "wrong score for a spades game"
+    match best_bid cards with
+    | Some g ->
+        fassert (Poly.( = ) g GAllTrumps)
+          (sprintf "%s: wrong bid test_best_bid_all_trumps" @@ show_cgame g)
+    | None -> fassert false "no bid test_best_bid_all_trumps"
   in
-  printf "hello";
-  cards_score_spades_game
+  let test_best_bid_no_trumps =
+    let cards =
+      [
+        Card.make SDiamonds King;
+        Card.make SSpades Ten;
+        Card.make SSpades Ace;
+        Card.make SClubs King;
+        Card.make SClubs Queen;
+      ]
+    in
+    match best_bid cards with
+    | Some g ->
+        fassert (Poly.( = ) g GNoTrumps)
+          (sprintf "%s: wrong bid test_best_bid_no_trumps" @@ show_cgame g)
+    | None -> fassert false "no bid test_best_bid_no_trumps"
+  in
+  let test_best_bid_color =
+    let cards =
+      [
+        Card.make SDiamonds King;
+        Card.make SSpades Ten;
+        Card.make SSpades Ace;
+        Card.make SClubs Jack;
+        Card.make SClubs Queen;
+      ]
+    in
+    match best_bid cards with
+    | Some g ->
+        fassert (Poly.( = ) g GClubs)
+          (sprintf "%s: wrong bid test_best_bid_color" @@ show_cgame g)
+    | None -> fassert false "no bid test_best_bid_color"
+  in
+  test_best_bid_no_trumps;
+  test_best_bid_all_trumps;
+  test_best_bid_color
+
+let run_tests _game =
+  test_cards_score;
+  test_best_bid
