@@ -1,7 +1,7 @@
 type csuite = SClubs | SDiamonds | SHearts | SSpades [@@deriving show]
 
 type cgame = GClubs | GDiamonds | GHearts | GSpades | GNoTrumps | GAllTrumps
-[@@deriving show, enum]
+[@@deriving show]
 
 type cvalue = Seven | Eight | Nine | Ten | Jack | Queen | King | Ace
 [@@deriving show]
@@ -75,8 +75,8 @@ let combination_worth = function
   | Carre9s -> 150
   | CarreJs -> 200
 
-type player_pos = North | West | South | East [@@deriving show, enum]
-type player_type = Human | Machine [@@deriving show, enum]
+type player_pos = North | West | South | East [@@deriving show]
+type player_type = Human | Machine [@@deriving show]
 
 let partner = function
   | North -> South

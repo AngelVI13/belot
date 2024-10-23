@@ -1,6 +1,5 @@
-open Core
+open! Core
 open Defs
-open Player
 
 type game_state =
   | SShuffle
@@ -75,8 +74,8 @@ let color_game_score trump_suite card card_value =
   let is_trump = Card.is_trump card trump_suite in
   if is_trump then trump_worth card_value else no_trump_worth card_value
 
-let no_trumps_score card card_value = no_trump_worth card_value
-let all_trumps_score card card_value = trump_worth card_value
+let no_trumps_score _ card_value = no_trump_worth card_value
+let all_trumps_score _ card_value = trump_worth card_value
 
 let calc_card_score cards ~score_f =
   let rec count_score cards score =
@@ -97,6 +96,20 @@ let cards_score cards chosen_game =
   | GClubs -> calc_card_score cards ~score_f:(color_game_score SClubs)
   | GNoTrumps -> calc_card_score cards ~score_f:no_trumps_score
   | GAllTrumps -> calc_card_score cards ~score_f:all_trumps_score
+
+let%expect_test "cards_score:spades_game" =
+  let cards =
+    [
+      Card.make SSpades Jack;
+      Card.make SSpades Nine;
+      Card.make SSpades Ace;
+      Card.make SHearts Nine;
+      Card.make SHearts Jack;
+    ]
+  in
+  let score = cards_score cards GSpades in
+  printf "---%d---" score;
+  [%expect {| |}]
 
 let best_bid cards =
   assert (List.length cards = 5);
@@ -120,11 +133,14 @@ let best_bid cards =
 
 let do_bidding game =
   (* TODO: bidding logic goes here *)
-  let rec bid players current_bid bidder = None in
+  let rec bid players current_bid bidder =
+    let _ = (players, current_bid, bidder) in
+    None
+  in
 
   (* if no bid has been made -> go to next round *)
   let chosen_game = bid game.players None None in
-  let state = match chosen_game with Some g -> SDealRest | None -> SShuffle in
+  let state = match chosen_game with Some _ -> SDealRest | None -> SShuffle in
 
   { game with state; chosen_game }
 
@@ -145,3 +161,22 @@ let rec play game =
       | SCalcScore -> do_calc_score game
     in
     play game
+
+let fassert cond msg = if cond then () else failwith msg
+
+let run_tests _game =
+  let cards_score_spades_game =
+    let cards =
+      [
+        Card.make SSpades Jack;
+        Card.make SSpades Nine;
+        Card.make SSpades Ace;
+        Card.make SHearts Nine;
+        Card.make SHearts Jack;
+      ]
+    in
+    let score = cards_score cards GSpades in
+    fassert (score = 19) "wrong score for a spades game"
+  in
+  printf "hello";
+  cards_score_spades_game

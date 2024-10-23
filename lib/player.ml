@@ -11,7 +11,7 @@ type t = {
   type_ : player_type;
 }
 
-let show = failwith "not implemented"
+(*let show = "not implemented"*)
 
 let make player_pos =
   {

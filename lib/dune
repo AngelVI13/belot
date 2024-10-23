@@ -1,3 +1,6 @@
 (library
  (name belot)
- (libraries base))
+ (inline_tests)
+ (preprocess
+ (pps ppx_deriving.show ppx_deriving.enum ppx_inline_test ppx_expect))
+ (libraries core fmt))
