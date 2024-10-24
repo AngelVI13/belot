@@ -1,7 +1,7 @@
 type csuite = SClubs | SDiamonds | SHearts | SSpades [@@deriving show]
 
 type cgame = GClubs | GDiamonds | GHearts | GSpades | GNoTrumps | GAllTrumps
-[@@deriving show]
+[@@deriving show, enum]
 
 type ccounter = CNo | CCounter | CReCounter [@@deriving show]
 

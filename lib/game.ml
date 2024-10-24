@@ -17,7 +17,7 @@ type t = {
   teams : Team.t list;
   state : game_state;
   chosen_game : cgame option;
-  bidder : Team.t option;
+  bidder : Player.t option;
   counter : ccounter;
   deck : Deck.t;
 }
@@ -116,7 +116,7 @@ let cards_score cards chosen_game =
   | GNoTrumps -> calc_card_score cards ~score_f:no_trumps_score
   | GAllTrumps -> calc_card_score cards ~score_f:all_trumps_score
 
-let best_bid cards =
+let best_bid cards current_bid current_counter =
   assert (List.length cards = 5);
 
   let possible_games =
@@ -135,18 +135,33 @@ let best_bid cards =
   in
   (*List.iter sorted_scores ~f:(fun (s, g) -> printf "%f %s\n" s (show_cgame g));*)
   let best_score, best_game = List.nth_exn sorted_scores 0 in
-  if Float.(best_score > 0.5) then Some best_game else None
+  match current_bid with
+  | None ->
+      if Float.(best_score > 0.5) then (Some best_game, CNo) else (None, CNo)
+  | Some current_b ->
+      if best_game = current_b && Float.(best_score > 0.75) then
+        match current_counter with
+        | CNo -> (Some best_game, CCounter)
+        | CCounter -> (Some best_game, CReCounter)
+        | CReCounter -> (None, CReCounter)
+      else if cgame_to_enum best_game > cgame_to_enum current_b then
+        (Some best_game, CNo)
+      else (None, CNo)
 
+(* TODO: write tests for this function!!! *)
 let do_bidding game =
-  (* TODO: add exit condition at top of this function. When number of passes == 4*)
-  (* TODO: add check that each player can only place higher bid that current bid *)
-  (* TODO: add support for counter and re-counter *)
   let rec bid player_idx current_bid bidder counter num_passes =
-    let player = List.nth_exn game.players player_idx in
-    let player_bid = best_bid (Player.cards player) in
-    match player_bid with
-    | None -> bid (next_player_idx player_idx) None None CNo (num_passes + 1)
-    | Some b -> (current_bid, bidder, counter)
+    if (Option.is_some current_bid && num_passes = 3) || num_passes = 4 then
+      (current_bid, bidder, counter)
+    else
+      let player = List.nth_exn game.players player_idx in
+      let player_bid, counter =
+        best_bid (Player.cards player) current_bid counter
+      in
+      match player_bid with
+      | None -> bid (next_player_idx player_idx) None None CNo (num_passes + 1)
+      | Some b ->
+          bid (next_player_idx player_idx) current_bid (Some player) counter 0
   in
 
   (* start bidding from the person east of the dealer *)
@@ -227,11 +242,51 @@ let test_best_bid =
         Card.make SHearts Jack;
       ]
     in
-    match best_bid cards with
-    | Some g ->
+    match best_bid cards None CNo with
+    | Some g, counter ->
         fassert (Poly.( = ) g GAllTrumps)
-          (sprintf "%s: wrong bid test_best_bid_all_trumps" @@ show_cgame g)
-    | None -> fassert false "no bid test_best_bid_all_trumps"
+          (sprintf "%s: wrong bid test_best_bid_all_trumps" @@ show_cgame g);
+        fassert (Poly.( = ) counter CNo)
+          (sprintf "%s: wrong counter test_best_bid_all_trumps" @@ show_cgame g)
+    | None, counter -> fassert false "no bid test_best_bid_all_trumps"
+  in
+  let test_best_bid_all_trumps_counter =
+    let cards =
+      [
+        Card.make SSpades Jack;
+        Card.make SSpades Nine;
+        Card.make SSpades Ace;
+        Card.make SHearts Nine;
+        Card.make SHearts Jack;
+      ]
+    in
+    match best_bid cards (Some GAllTrumps) CNo with
+    | Some g, counter ->
+        fassert (Poly.( = ) g GAllTrumps)
+          (sprintf "%s: wrong bid test_best_bid_all_trumps" @@ show_cgame g);
+        fassert
+          (Poly.( = ) counter CCounter)
+          (sprintf "%s: wrong counter test_best_bid_all_trumps" @@ show_cgame g)
+    | None, counter -> fassert false "no bid test_best_bid_all_trumps"
+  in
+  let test_best_bid_all_trumps_recounter =
+    let cards =
+      [
+        Card.make SSpades Jack;
+        Card.make SSpades Nine;
+        Card.make SSpades Ace;
+        Card.make SHearts Nine;
+        Card.make SHearts Jack;
+      ]
+    in
+    match best_bid cards (Some GAllTrumps) CCounter with
+    | Some g, counter ->
+        fassert (Poly.( = ) g GAllTrumps)
+          (sprintf "%s: wrong bid test_best_bid_all_trumps" @@ show_cgame g);
+        fassert
+          (Poly.( = ) counter CReCounter)
+          (sprintf "%s: wrong counter test_best_bid_all_trumps" @@ show_cgame g)
+    | None, counter -> fassert false "no bid test_best_bid_all_trumps"
   in
   let test_best_bid_no_trumps =
     let cards =
@@ -243,11 +298,11 @@ let test_best_bid =
         Card.make SClubs Queen;
       ]
     in
-    match best_bid cards with
-    | Some g ->
+    match best_bid cards None CNo with
+    | Some g, _ ->
         fassert (Poly.( = ) g GNoTrumps)
           (sprintf "%s: wrong bid test_best_bid_no_trumps" @@ show_cgame g)
-    | None -> fassert false "no bid test_best_bid_no_trumps"
+    | None, _ -> fassert false "no bid test_best_bid_no_trumps"
   in
   let test_best_bid_color =
     let cards =
@@ -259,14 +314,16 @@ let test_best_bid =
         Card.make SClubs Queen;
       ]
     in
-    match best_bid cards with
-    | Some g ->
+    match best_bid cards None CNo with
+    | Some g, _ ->
         fassert (Poly.( = ) g GClubs)
           (sprintf "%s: wrong bid test_best_bid_color" @@ show_cgame g)
-    | None -> fassert false "no bid test_best_bid_color"
+    | None, _ -> fassert false "no bid test_best_bid_color"
   in
   test_best_bid_no_trumps;
   test_best_bid_all_trumps;
+  test_best_bid_all_trumps_counter;
+  test_best_bid_all_trumps_recounter;
   test_best_bid_color
 
 let run_tests _game =
