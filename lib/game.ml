@@ -73,19 +73,18 @@ let do_shuffle game =
     counter = CNo;
   }
 
-let do_deal_pre_bid game =
-  let rec deal players card_num deck new_players =
-    match players with
-    | [] -> (new_players, deck)
-    | p :: players ->
-        let cards, deck = Result.ok_or_failwith (Deck.deal deck card_num) in
-        let player = Player.store_cards p (Deck.to_cards cards) in
-        deal players card_num deck (player :: new_players)
-  in
+let rec deal_cards players card_num deck new_players =
+  match players with
+  | [] -> (new_players, deck)
+  | p :: players ->
+      let cards, deck = Result.ok_or_failwith (Deck.deal deck card_num) in
+      let player = Player.store_cards p (Deck.to_cards cards) in
+      deal_cards players card_num deck (player :: new_players)
 
+let do_deal_pre_bid game =
   (* first deal every player 3 cards then deal every player 2 cards *)
-  let players, deck = deal game.players 3 game.deck [] in
-  let players, deck = deal players 2 deck [] in
+  let players, deck = deal_cards game.players 3 game.deck [] in
+  let players, deck = deal_cards players 2 deck [] in
   { game with state = SBidding; players; deck }
 
 (* NOTE: these do not account for combination score *)
@@ -174,7 +173,11 @@ let do_bidding game =
 
   { game with state; chosen_game; bidder; counter }
 
-let do_deal_rest game = { game with state = SPlay }
+let do_deal_rest game =
+  let players, deck = deal_cards game.players 3 game.deck [] in
+  { game with state = SPlay; deck; players }
+
+(* TODO: implement these *)
 let do_play game = { game with state = SCalcScore }
 let do_calc_score game = { game with state = SShuffle }
 
