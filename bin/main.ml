@@ -1,6 +1,6 @@
-open Core
-open Belot.Game
+open! Core
+open! Belot.Game
 
 let () =
   let game = Belot.Game.make in
-  Belot.Game.run_tests game
+  print_endline @@ Belot.Game.show game

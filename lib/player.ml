@@ -11,7 +11,15 @@ type t = {
   type_ : player_type;
 }
 
-(*let show = "not implemented"*)
+let show player =
+  let type_s = show_player_type player.type_ in
+  let pos_s = show_player_pos player.pos in
+  let partner_s = show_player_pos player.partner in
+  let announce_s =
+    match player.announce with None -> "NoAnnonce" | Some s -> show_cgame s
+  in
+  sprintf "%s %s %s %s %d %s" player.name type_s pos_s partner_s player.points
+    announce_s
 
 let make player_pos =
   {
