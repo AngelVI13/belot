@@ -45,3 +45,4 @@ let deal deck num_cards =
     deal_aux deck num_cards []
 
 let to_cards deck = deck
+let of_cards cards = cards

@@ -17,7 +17,7 @@ type t = {
   teams : Team.t list;
   state : game_state;
   chosen_game : cgame option;
-  bidder : Player.t option;
+  bidder_idx : int option;
   counter : ccounter;
   deck : Deck.t;
 }
@@ -40,12 +40,13 @@ let make =
   let players = make_players in
   {
     players;
-    dealer_idx = 0;
+    (* this gets incremented in shuffle *)
+    dealer_idx = -1;
     teams = make_teams;
     state = SShuffle;
     deck = Deck.make;
     chosen_game = None;
-    bidder = None;
+    bidder_idx = None;
     counter = CNo;
   }
 
@@ -56,7 +57,7 @@ let show game =
     match game.chosen_game with None -> "no" | Some s -> show_cgame s
   in
   let bidder_s =
-    match game.bidder with None -> "no" | Some s -> Player.show s
+    match game.bidder_idx with None -> "no" | Some s -> sprintf "%d" s
   in
   sprintf "game: %d %s %s %s" (List.length game.players) counter_s chosen_game_s
     bidder_s
@@ -78,7 +79,7 @@ let do_shuffle game =
     players;
     dealer_idx;
     chosen_game = None;
-    bidder = None;
+    bidder_idx = None;
     state = SDealPreBid;
     counter = CNo;
   }
@@ -157,7 +158,6 @@ let best_bid cards current_bid current_counter =
         (Some best_game, CNo)
       else (None, CNo)
 
-(* TODO: write tests for this function!!! *)
 let do_bidding game =
   let rec bid player_idx current_bid bidder counter num_passes =
     if (Option.is_some current_bid && num_passes = 3) || num_passes = 4 then
@@ -167,21 +167,26 @@ let do_bidding game =
       let player_bid, counter =
         best_bid (Player.cards player) current_bid counter
       in
+      (*printf "%b %d %s %d"*)
+      (*  (Option.is_some player_bid)*)
+      (*  player_idx (show_ccounter counter) num_passes;*)
+      let next_player = next_player_idx player_idx in
       match player_bid with
-      | None -> bid (next_player_idx player_idx) None None CNo (num_passes + 1)
-      | Some _ ->
-          bid (next_player_idx player_idx) player_bid (Some player) counter 0
+      (* None is considered a pass -> pass on the current bid and current counter *)
+      | None -> bid next_player current_bid bidder counter (num_passes + 1)
+      (* Some means the player raised the current bid or counter *)
+      | Some _ -> bid next_player player_bid (Some player_idx) counter 0
   in
 
   (* start bidding from the person east of the dealer *)
-  let chosen_game, bidder, counter =
+  let chosen_game, bidder_idx, counter =
     bid (next_player_idx game.dealer_idx) None None CNo 0
   in
 
   (* if no bid has been made -> go to next round *)
   let state = match chosen_game with Some _ -> SDealRest | None -> SShuffle in
 
-  { game with state; chosen_game; bidder; counter }
+  { game with state; chosen_game; bidder_idx; counter }
 
 let do_deal_rest game =
   let players, deck = deal_cards game.players 3 game.deck [] in
@@ -324,3 +329,48 @@ let%expect_test "test_best_bid_color" =
   | Some g ->
       printf "%s" @@ show_cgame g;
       [%expect {| Defs.GClubs |}]
+
+let%expect_test "do_bidding" =
+  let test_deck =
+    [
+      (* dealer cards *)
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      (* starting player *)
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      (* player 3 (dealer partner) *)
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      (* player 4 (starting player partner) *)
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+      Card.make SSpades Jack;
+    ]
+  in
+  let game = make |> do_shuffle in
+  let players, deck = deal_cards game.players 5 (Deck.of_cards test_deck) [] in
+  let game = { game with state = SBidding; players; deck } in
+  let game = do_bidding game in
+  let chosen_game =
+    match game.chosen_game with None -> "No game" | Some g -> show_cgame g
+  in
+  let bidding_player =
+    match game.bidder_idx with None -> "Noone" | Some p -> sprintf "%d" p
+  in
+  printf "identifier: game=%s counter=%s bidder=%s state=%s" chosen_game
+    (show_ccounter game.counter)
+    bidding_player
+    (show_game_state game.state);
+  [%expect {| |}]
