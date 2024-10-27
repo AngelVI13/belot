@@ -2,7 +2,14 @@ open! Core
 open Defs
 open! Poly
 
+(* TODO: read those from a config file *)
+let raiseNoBidScore = 0.50
+let raiseBidScore = 0.70
+let counterBidScore = 0.75
+let raisePartnerNoTrumpsScore = 0.85
+
 type bid = { game : cgame; bidder : player_pos; counter : ccounter }
+[@@deriving show]
 
 let make_bid chosen_game bidder counter =
   { game = chosen_game; bidder; counter }
@@ -22,6 +29,7 @@ type t = {
   teams : Team.t list;
   state : game_state;
   chosen_game : bid option;
+  bid_history : (player_pos * bid option) list; (* this is for debug only *)
   deck : Deck.t;
 }
 
@@ -49,18 +57,26 @@ let make =
     state = SShuffle;
     deck = Deck.make;
     chosen_game = None;
+    bid_history = [];
   }
 
 let show (game : t) =
-  (* TODO: these are here purely for the compiler to be happy. Remove later *)
   let chosen_game_s, bidder_s, counter_s =
     match game.chosen_game with
     | None -> ("no", "no", "no")
     | Some s ->
         (show_cgame s.game, show_player_pos s.bidder, show_ccounter s.counter)
   in
-  sprintf "game: %d %s %s %s" (List.length game.players) counter_s chosen_game_s
-    bidder_s
+  let bid_history =
+    List.map game.bid_history ~f:(fun (pos, bid) ->
+        match bid with
+        | None -> sprintf "%s pass\n" (show_player_pos pos)
+        | Some b -> sprintf "%s %s\n" (show_player_pos pos) (show_bid b))
+  in
+  sprintf "State: %s\nGame: %s %s %s\nBid History:\n%s"
+    (show_game_state game.state)
+    counter_s chosen_game_s bidder_s
+    (List.fold bid_history ~init:"" ~f:(fun acc el -> sprintf "%s%s" acc el))
 
 let finished game =
   match game.teams with
@@ -124,7 +140,7 @@ let cards_score cards chosen_game =
   | GNoTrumps -> calc_card_score cards ~score_f:no_trumps_score
   | GAllTrumps -> calc_card_score cards ~score_f:all_trumps_score
 
-let best_bid cards current_bid player_pos =
+let calculate_best_game cards =
   assert (List.length cards = 5);
 
   let possible_games =
@@ -141,58 +157,85 @@ let best_bid cards current_bid player_pos =
     List.sort game_scores ~compare:(fun (score1, _) (score2, _) ->
         if Float.(score1 < score2) then 1 else -1)
   in
-  (*List.iter sorted_scores ~f:(fun (s, g) -> printf "%f %s\n" s (show_cgame g));*)
   let best_score, best_game = List.nth_exn sorted_scores 0 in
-  (* TODO: you can't counter your partner's bid *)
-  (* TODO: if partner bids color and you want to bid a lower color -> bid all trumps *)
+  (best_score, best_game)
+
+let best_bid cards current_bid player_pos =
+  let best_score, best_game = calculate_best_game cards in
   (* TODO: if you bid color and then your partner bids another color -> bid all trumps *)
-  (* TODO: if partner bids no trumps then only bid all trumps if you have worth > 85% or sth*)
   match current_bid with
   | None ->
-      if Float.(best_score > 0.5) then Some (make_bid best_game player_pos CNo)
+      if Float.(best_score > raiseNoBidScore) then
+        Some (make_bid best_game player_pos CNo)
       else None
   | Some current_b ->
-      if best_game = current_b.game && Float.(best_score > 0.75) then
+      (* my best game is same as current bid (from my partner) -> do nothing *)
+      if best_game = current_b.game && player_pos = partner current_b.bidder
+      then None
+      else if
+        (* my best game is same as current bid (from opponent) -> raise counter
+           if cards worth is > X% *)
+        best_game = current_b.game
+        && player_pos <> partner current_b.bidder
+        && Float.(best_score > counterBidScore)
+      then
         match current_b.counter with
         | CNo -> Some (make_bid best_game player_pos CCounter)
         | CCounter -> Some (make_bid best_game player_pos CReCounter)
-        | CReCounter -> current_bid
+        | CReCounter -> None
       else if cgame_to_enum best_game > cgame_to_enum current_b.game then
-        Some (make_bid best_game player_pos CNo)
+        (* my best game is bigger than the current bid -> raise bid *)
+        if
+          (* if game is no trumps and current bidder is my partner do not
+             raise to all trumps if cards worth less than <X% *)
+          player_pos = partner current_b.bidder
+          && current_b.game = GNoTrumps
+          && Float.(best_score <= raisePartnerNoTrumpsScore)
+        then None
+        else if Float.(best_score > raiseBidScore) then
+          (* make bid only if my cards are worth more than >X% *)
+          Some (make_bid best_game player_pos CNo)
+        else None
+      else if
+        (* my best game is smaller than the current bid (from partner) and
+           current bid is a color and cards are worth >X% -> raise to AllTrumps *)
+        cgame_to_enum best_game < cgame_to_enum current_b.game
+        && player_pos = partner current_b.bidder
+        && cgame_to_enum current_b.game < cgame_to_enum GNoTrumps
+        && Float.(best_score > raiseBidScore)
+      then Some (make_bid GAllTrumps player_pos CNo)
       else None
 
-let is_partner game player other_idx =
-  let partner_pos = partner @@ Player.pos player in
-  let other_player = List.nth_exn game.players other_idx in
-  let other_pos = Player.pos other_player in
-  partner_pos = other_pos
-
 let do_bidding game =
-  let rec bid player_idx current_bid num_passes =
+  let rec bid player_idx current_bid num_passes history =
     if (Option.is_some current_bid && num_passes = 3) || num_passes = 4 then
-      current_bid
+      (current_bid, List.rev history)
     else
       let player = List.nth_exn game.players player_idx in
-      let player_bid =
-        best_bid (Player.cards player) current_bid (Player.pos player)
-      in
+      let player_pos = Player.pos player in
+      let player_bid = best_bid (Player.cards player) current_bid player_pos in
       (*printf "%b %d %s %d"*)
       (*  (Option.is_some player_bid)*)
       (*  player_idx (show_ccounter counter) num_passes;*)
       let next_player = next_player_idx player_idx in
       match player_bid with
       (* None is considered a pass -> pass on the current bid and current counter *)
-      | None -> bid next_player current_bid (num_passes + 1)
+      | None ->
+          bid next_player current_bid (num_passes + 1)
+            ((player_pos, None) :: history)
       (* Some means the player raised the current bid or counter *)
-      | Some _ -> bid next_player player_bid 0
+      | Some _ ->
+          bid next_player player_bid 0 ((player_pos, player_bid) :: history)
   in
 
   (* start bidding from the person east of the dealer *)
-  let final_bid = bid (next_player_idx game.dealer_idx) None 0 in
+  let final_bid, bid_history =
+    bid (next_player_idx game.dealer_idx) None 0 []
+  in
 
   (* if no bid has been made -> go to next round *)
   let state = match final_bid with Some _ -> SDealRest | None -> SShuffle in
-  { game with state; chosen_game = final_bid }
+  { game with state; chosen_game = final_bid; bid_history }
 
 let do_deal_rest game =
   let players, deck = deal_cards game.players 3 game.deck [] in
@@ -250,14 +293,14 @@ let%expect_test "test_best_bid_all_trumps" =
       Card.make SHearts Jack;
     ]
   in
-  let bid, counter = best_bid cards None None CNo in
-  printf "%b %s" (Option.is_some bid) (show_ccounter counter);
-  [%expect {| true Defs.CNo |}];
+  let bid = best_bid cards None South in
   match bid with
   | None -> [%expect.unreachable]
-  | Some g ->
-      printf "%s" @@ show_cgame g;
-      [%expect {| Defs.GAllTrumps |}]
+  | Some b ->
+      printf "%s" @@ show_cgame b.game;
+      [%expect {| Defs.GAllTrumps |}];
+      printf "%s" @@ show_ccounter b.counter;
+      [%expect {| Defs.CNo |}]
 
 let%expect_test "test_best_bid_all_trumps_counter" =
   let cards =
@@ -270,14 +313,14 @@ let%expect_test "test_best_bid_all_trumps_counter" =
     ]
   in
 
-  let bid, counter = best_bid cards (Some GAllTrumps) CNo in
-  printf "%b %s" (Option.is_some bid) (show_ccounter counter);
-  [%expect {| true Defs.CCounter |}];
+  let bid = best_bid cards None South in
   match bid with
   | None -> [%expect.unreachable]
-  | Some g ->
-      printf "%s" @@ show_cgame g;
-      [%expect {| Defs.GAllTrumps |}]
+  | Some b ->
+      printf "%s" @@ show_cgame b.game;
+      [%expect {| Defs.GAllTrumps |}];
+      printf "%s" @@ show_ccounter b.counter;
+      [%expect {| Defs.CNo |}]
 
 let%expect_test "test_best_bid_all_trumps_recounter" =
   let cards =
@@ -289,14 +332,15 @@ let%expect_test "test_best_bid_all_trumps_recounter" =
       Card.make SHearts Jack;
     ]
   in
-  let bid, counter = best_bid cards (Some GAllTrumps) CCounter in
-  printf "%b %s" (Option.is_some bid) (show_ccounter counter);
-  [%expect {| true Defs.CReCounter |}];
+
+  let bid = best_bid cards None South in
   match bid with
   | None -> [%expect.unreachable]
-  | Some g ->
-      printf "%s" @@ show_cgame g;
-      [%expect {| Defs.GAllTrumps |}]
+  | Some b ->
+      printf "%s" @@ show_cgame b.game;
+      [%expect {| Defs.GAllTrumps |}];
+      printf "%s" @@ show_ccounter b.counter;
+      [%expect {| Defs.CNo |}]
 
 let%expect_test "test_best_bid_no_trumps" =
   let cards =
@@ -308,14 +352,14 @@ let%expect_test "test_best_bid_no_trumps" =
       Card.make SClubs Queen;
     ]
   in
-  let bid, counter = best_bid cards None CNo in
-  printf "%b %s" (Option.is_some bid) (show_ccounter counter);
-  [%expect {| true Defs.CNo |}];
+  let bid = best_bid cards None South in
   match bid with
   | None -> [%expect.unreachable]
-  | Some g ->
-      printf "%s" @@ show_cgame g;
-      [%expect {| Defs.GNoTrumps |}]
+  | Some b ->
+      printf "%s" @@ show_cgame b.game;
+      [%expect {| Defs.GNoTrumps |}];
+      printf "%s" @@ show_ccounter b.counter;
+      [%expect {| Defs.CNo |}]
 
 let%expect_test "test_best_bid_color" =
   let cards =
@@ -327,14 +371,14 @@ let%expect_test "test_best_bid_color" =
       Card.make SClubs Queen;
     ]
   in
-  let bid, counter = best_bid cards None CNo in
-  printf "%b %s" (Option.is_some bid) (show_ccounter counter);
-  [%expect {| true Defs.CNo |}];
+  let bid = best_bid cards None South in
   match bid with
   | None -> [%expect.unreachable]
-  | Some g ->
-      printf "%s" @@ show_cgame g;
-      [%expect {| Defs.GClubs |}]
+  | Some b ->
+      printf "%s" @@ show_cgame b.game;
+      [%expect {| Defs.GClubs |}];
+      printf "%s" @@ show_ccounter b.counter;
+      [%expect {| Defs.CNo |}]
 
 let%expect_test "do_bidding" =
   let test_deck =
@@ -369,14 +413,16 @@ let%expect_test "do_bidding" =
   let players, deck = deal_cards game.players 5 (Deck.of_cards test_deck) [] in
   let game = { game with state = SBidding; players; deck } in
   let game = do_bidding game in
-  let chosen_game =
-    match game.chosen_game with None -> "No game" | Some g -> show_cgame g
-  in
-  let bidding_player =
-    match game.bidder_idx with None -> "Noone" | Some p -> sprintf "%d" p
-  in
-  printf "identifier: game=%s counter=%s bidder=%s state=%s" chosen_game
-    (show_ccounter game.counter)
-    bidding_player
-    (show_game_state game.state);
-  [%expect {| |}]
+  print_endline @@ show game;
+  [%expect
+    {|
+    State: Game.SDealRest
+    Game: Defs.CReCounter Defs.GSpades Defs.West
+    Bid History:
+    Defs.East { Game.game = Defs.GSpades; bidder = Defs.East; counter = Defs.CNo }
+    Defs.North { Game.game = Defs.GSpades; bidder = Defs.North; counter = Defs.CCounter }
+    Defs.West { Game.game = Defs.GSpades; bidder = Defs.West; counter = Defs.CReCounter }
+    Defs.South pass
+    Defs.East pass
+    Defs.North pass
+    |}]
