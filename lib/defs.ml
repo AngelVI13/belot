@@ -77,7 +77,7 @@ let combination_worth = function
   | Carre9s -> 150
   | CarreJs -> 200
 
-type player_pos = North | West | South | East [@@deriving show]
+type player_pos = North | West | South | East [@@deriving show, enum]
 type player_type = Human | Machine [@@deriving show]
 
 let partner = function
