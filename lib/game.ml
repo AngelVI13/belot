@@ -3,7 +3,11 @@ open Defs
 open! Poly
 
 (* TODO: read those from a config file *)
-let raiseNoBidScore = 0.50
+(* TODO: every round apply a small randomness to these numbers to imitate the
+   feel of a real person playing. For example raiseNoBidScore = 0.50 + rand [0.2: 0.9].
+   This should only be enabled during real game and should be disabled during testing.
+*)
+let raiseNoBidScore = 0.60
 let raiseBidScore = 0.70
 let counterBidScore = 0.75
 let raisePartnerNoTrumpsScore = 0.85
@@ -74,7 +78,7 @@ let show (game : t) =
         | Some b -> sprintf "%s %s\n" (show_player_pos pos) (show_bid b))
   in
   let players = List.map game.players ~f:(fun p -> Player.show p) in
-  sprintf "State: %s\nGame: %s %s %s\nBid History:\n%sPlayers:\n%s"
+  sprintf "State: %s\nGame: %s %s %s\n---\nBid History:\n%s---\nPlayers:\n%s"
     (show_game_state game.state)
     counter_s chosen_game_s bidder_s
     (List.fold bid_history ~init:"" ~f:(fun acc el -> sprintf "%s%s" acc el))
@@ -160,12 +164,9 @@ let calculate_best_game cards =
     List.sort game_scores ~compare:(fun (score1, _) (score2, _) ->
         if Float.(score1 < score2) then 1 else -1)
   in
-  let best_score, best_game = List.nth_exn sorted_scores 0 in
-  (best_score, best_game)
+  List.take sorted_scores 3
 
-let best_bid cards current_bid player_pos =
-  let best_score, best_game = calculate_best_game cards in
-  (* TODO: if you bid color and then your partner bids another color -> bid all trumps *)
+let decide_bid current_bid best_score best_game player_pos =
   match current_bid with
   | None ->
       if Float.(best_score > raiseNoBidScore) then
@@ -208,6 +209,28 @@ let best_bid cards current_bid player_pos =
         && Float.(best_score > raiseBidScore)
       then Some (make_bid GAllTrumps player_pos CNo)
       else None
+
+let best_bid cards current_bid player_pos =
+  let top_games = calculate_best_game cards in
+  printf "%s\n" @@ show_player_pos player_pos;
+  List.iter top_games ~f:(fun (s, g) -> printf "%f %s\n" s (show_cgame g));
+  printf "---------\n";
+
+  (* if current top bid is for example AllTrumps but your best game is Clubs
+      then try out your next best games because maybe you have a high enough
+      score for AllTrumps that is strong enough to raise the current bid *)
+  let rec decide candidates =
+    match candidates with
+    | [] -> None
+    | (candidate_score, candidate_game) :: tl -> (
+        let bid =
+          decide_bid current_bid candidate_score candidate_game player_pos
+        in
+        match bid with None -> decide tl | Some _ -> bid)
+  in
+
+  decide top_games
+(* TODO: if you bid color and then your partner bids another color -> bid all trumps *)
 
 let do_bidding game =
   let rec bid player_idx current_bid num_passes history =
@@ -301,7 +324,15 @@ let%expect_test "test_best_bid_all_trumps" =
   | None -> [%expect.unreachable]
   | Some b ->
       printf "%s" @@ show_cgame b.game;
-      [%expect {| Defs.GAllTrumps |}];
+      [%expect
+        {|
+        Defs.South
+        0.840426 Defs.GAllTrumps
+        0.701493 Defs.GSpades
+        0.701493 Defs.GHearts
+        ---------
+        Defs.GAllTrumps
+        |}];
       printf "%s" @@ show_ccounter b.counter;
       [%expect {| Defs.CNo |}]
 
@@ -315,15 +346,24 @@ let%expect_test "test_best_bid_all_trumps_counter" =
       Card.make SHearts Jack;
     ]
   in
+  let current_bid = Some { game = GAllTrumps; bidder = East; counter = CNo } in
 
-  let bid = best_bid cards None South in
+  let bid = best_bid cards current_bid South in
   match bid with
   | None -> [%expect.unreachable]
   | Some b ->
       printf "%s" @@ show_cgame b.game;
-      [%expect {| Defs.GAllTrumps |}];
+      [%expect
+        {|
+        Defs.South
+        0.840426 Defs.GAllTrumps
+        0.701493 Defs.GSpades
+        0.701493 Defs.GHearts
+        ---------
+        Defs.GAllTrumps
+        |}];
       printf "%s" @@ show_ccounter b.counter;
-      [%expect {| Defs.CNo |}]
+      [%expect {| Defs.CCounter |}]
 
 let%expect_test "test_best_bid_all_trumps_recounter" =
   let cards =
@@ -335,20 +375,31 @@ let%expect_test "test_best_bid_all_trumps_recounter" =
       Card.make SHearts Jack;
     ]
   in
+  let current_bid =
+    Some { game = GAllTrumps; bidder = East; counter = CCounter }
+  in
 
-  let bid = best_bid cards None South in
+  let bid = best_bid cards current_bid South in
   match bid with
   | None -> [%expect.unreachable]
   | Some b ->
       printf "%s" @@ show_cgame b.game;
-      [%expect {| Defs.GAllTrumps |}];
+      [%expect
+        {|
+        Defs.South
+        0.840426 Defs.GAllTrumps
+        0.701493 Defs.GSpades
+        0.701493 Defs.GHearts
+        ---------
+        Defs.GAllTrumps
+        |}];
       printf "%s" @@ show_ccounter b.counter;
-      [%expect {| Defs.CNo |}]
+      [%expect {| Defs.CReCounter |}]
 
 let%expect_test "test_best_bid_no_trumps" =
   let cards =
     [
-      Card.make SDiamonds King;
+      Card.make SDiamonds Ace;
       Card.make SSpades Ten;
       Card.make SSpades Ace;
       Card.make SClubs King;
@@ -360,7 +411,15 @@ let%expect_test "test_best_bid_no_trumps" =
   | None -> [%expect.unreachable]
   | Some b ->
       printf "%s" @@ show_cgame b.game;
-      [%expect {| Defs.GNoTrumps |}];
+      [%expect
+        {|
+        Defs.South
+        0.722222 Defs.GNoTrumps
+        0.582090 Defs.GSpades
+        0.582090 Defs.GDiamonds
+        ---------
+        Defs.GNoTrumps
+        |}];
       printf "%s" @@ show_ccounter b.counter;
       [%expect {| Defs.CNo |}]
 
@@ -379,59 +438,120 @@ let%expect_test "test_best_bid_color" =
   | None -> [%expect.unreachable]
   | Some b ->
       printf "%s" @@ show_cgame b.game;
-      [%expect {| Defs.GClubs |}];
+      [%expect
+        {|
+        Defs.South
+        0.716418 Defs.GClubs
+        0.555556 Defs.GNoTrumps
+        0.510638 Defs.GAllTrumps
+        ---------
+        Defs.GClubs
+        |}];
       printf "%s" @@ show_ccounter b.counter;
       [%expect {| Defs.CNo |}]
 
-let%expect_test "do_bidding" =
+let test_setup_do_bidding deck =
+  let game = make |> do_shuffle in
+  let players, deck = deal_cards game.players 5 (Deck.of_cards deck) [] in
+  let game = { game with state = SBidding; players; deck } in
+  let game = do_bidding game in
+  game
+
+let%expect_test "do_bidding_1" =
   let test_deck =
     [
-      (* dealer cards *)
+      (* south *)
       Card.make SSpades Eight;
       Card.make SSpades Ten;
       Card.make SSpades Ace;
       Card.make SHearts Eight;
       Card.make SSpades Nine;
-      (* starting player *)
-      Card.make SSpades Queen;
+      (* east *)
+      Card.make SSpades Jack;
       Card.make SClubs Jack;
       Card.make SDiamonds King;
       Card.make SDiamonds Ace;
-      Card.make SClubs Ace;
-      (* player 3 (dealer partner) *)
+      Card.make SClubs Nine;
+      (* north *)
       Card.make SHearts Ten;
-      Card.make SHearts Seven;
+      Card.make SHearts Ace;
       Card.make SHearts Jack;
       Card.make SDiamonds Ten;
       Card.make SClubs Eight;
-      (* player 4 (starting player partner) *)
+      (* west *)
       Card.make SDiamonds Eight;
       Card.make SSpades Seven;
       Card.make SDiamonds Queen;
-      Card.make SHearts Ace;
+      Card.make SHearts Seven;
       Card.make SClubs King;
     ]
   in
-  let game = make |> do_shuffle in
-  let players, deck = deal_cards game.players 5 (Deck.of_cards test_deck) [] in
-  List.iter players ~f:(fun p ->
-      printf "%s " @@ show_player_pos @@ Player.pos p);
-  [%expect {| Defs.South Defs.East Defs.North Defs.West |}];
+  let game = test_setup_do_bidding test_deck in
 
-  let game = { game with state = SBidding; players; deck } in
-  let game = do_bidding game in
+  List.iter game.players ~f:(fun p ->
+      printf "%s " @@ show_player_pos @@ Player.pos p);
+  [%expect
+    {|
+    Defs.East
+    0.761194 Defs.GClubs
+    0.734043 Defs.GAllTrumps
+    0.552239 Defs.GSpades
+    ---------
+    Defs.North
+    0.761194 Defs.GHearts
+    0.611111 Defs.GNoTrumps
+    0.542553 Defs.GAllTrumps
+    ---------
+    Defs.West
+    0.129630 Defs.GNoTrumps
+    0.104478 Defs.GSpades
+    0.104478 Defs.GDiamonds
+    ---------
+    Defs.South
+    0.522388 Defs.GSpades
+    0.388889 Defs.GNoTrumps
+    0.372340 Defs.GAllTrumps
+    ---------
+    Defs.East
+    0.761194 Defs.GClubs
+    0.734043 Defs.GAllTrumps
+    0.552239 Defs.GSpades
+    ---------
+    Defs.North
+    0.761194 Defs.GHearts
+    0.611111 Defs.GNoTrumps
+    0.542553 Defs.GAllTrumps
+    ---------
+    Defs.West
+    0.129630 Defs.GNoTrumps
+    0.104478 Defs.GSpades
+    0.104478 Defs.GDiamonds
+    ---------
+    Defs.South
+    0.522388 Defs.GSpades
+    0.388889 Defs.GNoTrumps
+    0.372340 Defs.GAllTrumps
+    ---------
+    Defs.South Defs.East Defs.North Defs.West
+    |}];
 
   print_endline @@ show game;
   (* TODO: how to remove `Game.game` and just have `game` ? *)
   [%expect
     {|
     State: Game.SDealRest
-    Game: Defs.CNo Defs.GClubs Defs.East
+    Game: Defs.CNo Defs.GAllTrumps Defs.East
+    ---
     Bid History:
     Defs.East { Game.game = Defs.GClubs; bidder = Defs.East; counter = Defs.CNo }
+    Defs.North { Game.game = Defs.GHearts; bidder = Defs.North; counter = Defs.CNo }
+    Defs.West pass
+    Defs.South pass
+    Defs.East { Game.game = Defs.GAllTrumps; bidder = Defs.East; counter = Defs.CNo }
     Defs.North pass
     Defs.West pass
     Defs.South pass
+    ---
     Players:
     Player:
     Name:Defs.South
@@ -452,11 +572,11 @@ let%expect_test "do_bidding" =
     Partner:Defs.WestPoints:0
     Announce:NoAnnonce
     Cards:
-    { Card.suite = Defs.SSpades; value = Defs.Queen }
+    { Card.suite = Defs.SSpades; value = Defs.Jack }
     { Card.suite = Defs.SClubs; value = Defs.Jack }
     { Card.suite = Defs.SDiamonds; value = Defs.King }
     { Card.suite = Defs.SDiamonds; value = Defs.Ace }
-    { Card.suite = Defs.SClubs; value = Defs.Ace }
+    { Card.suite = Defs.SClubs; value = Defs.Nine }
     Player:
     Name:Defs.North
     Type:Defs.Machine
@@ -465,7 +585,7 @@ let%expect_test "do_bidding" =
     Announce:NoAnnonce
     Cards:
     { Card.suite = Defs.SHearts; value = Defs.Ten }
-    { Card.suite = Defs.SHearts; value = Defs.Seven }
+    { Card.suite = Defs.SHearts; value = Defs.Ace }
     { Card.suite = Defs.SHearts; value = Defs.Jack }
     { Card.suite = Defs.SDiamonds; value = Defs.Ten }
     { Card.suite = Defs.SClubs; value = Defs.Eight }
@@ -479,6 +599,266 @@ let%expect_test "do_bidding" =
     { Card.suite = Defs.SDiamonds; value = Defs.Eight }
     { Card.suite = Defs.SSpades; value = Defs.Seven }
     { Card.suite = Defs.SDiamonds; value = Defs.Queen }
-    { Card.suite = Defs.SHearts; value = Defs.Ace }
+    { Card.suite = Defs.SHearts; value = Defs.Seven }
     { Card.suite = Defs.SClubs; value = Defs.King }
+    |}]
+
+let%expect_test "do_bidding_2" =
+  let test_deck =
+    [
+      (* south *)
+      Card.make SHearts Ace;
+      Card.make SDiamonds Seven;
+      Card.make SSpades Eight;
+      Card.make SHearts Seven;
+      Card.make SClubs Eight;
+      (* east *)
+      Card.make SDiamonds King;
+      Card.make SDiamonds Ten;
+      Card.make SClubs Ten;
+      Card.make SDiamonds Queen;
+      Card.make SDiamonds Nine;
+      (* north *)
+      Card.make SDiamonds Ace;
+      Card.make SClubs Seven;
+      Card.make SClubs Ace;
+      Card.make SHearts Ten;
+      Card.make SDiamonds Eight;
+      (* west *)
+      Card.make SDiamonds Jack;
+      Card.make SSpades Ten;
+      Card.make SHearts Ace;
+      Card.make SHearts Nine;
+      Card.make SSpades Nine;
+    ]
+  in
+  let game = test_setup_do_bidding test_deck in
+
+  print_endline @@ show game;
+  (* TODO: how to remove `Game.game` and just have `game` ? *)
+  [%expect
+    {|
+    Defs.East
+    0.611940 Defs.GDiamonds
+    0.500000 Defs.GNoTrumps
+    0.436170 Defs.GAllTrumps
+    ---------
+    Defs.North
+    0.592593 Defs.GNoTrumps
+    0.477612 Defs.GSpades
+    0.477612 Defs.GDiamonds
+    ---------
+    Defs.West
+    0.734043 Defs.GAllTrumps
+    0.611940 Defs.GDiamonds
+    0.552239 Defs.GSpades
+    ---------
+    Defs.South
+    0.203704 Defs.GNoTrumps
+    0.164179 Defs.GSpades
+    0.164179 Defs.GDiamonds
+    ---------
+    Defs.East
+    0.611940 Defs.GDiamonds
+    0.500000 Defs.GNoTrumps
+    0.436170 Defs.GAllTrumps
+    ---------
+    Defs.North
+    0.592593 Defs.GNoTrumps
+    0.477612 Defs.GSpades
+    0.477612 Defs.GDiamonds
+    ---------
+    State: Game.SDealRest
+    Game: Defs.CNo Defs.GAllTrumps Defs.West
+    ---
+    Bid History:
+    Defs.East { Game.game = Defs.GDiamonds; bidder = Defs.East; counter = Defs.CNo }
+    Defs.North pass
+    Defs.West { Game.game = Defs.GAllTrumps; bidder = Defs.West; counter = Defs.CNo }
+    Defs.South pass
+    Defs.East pass
+    Defs.North pass
+    ---
+    Players:
+    Player:
+    Name:Defs.South
+    Type:Defs.Machine
+    Pos:Defs.South
+    Partner:Defs.NorthPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SHearts; value = Defs.Ace }
+    { Card.suite = Defs.SDiamonds; value = Defs.Seven }
+    { Card.suite = Defs.SSpades; value = Defs.Eight }
+    { Card.suite = Defs.SHearts; value = Defs.Seven }
+    { Card.suite = Defs.SClubs; value = Defs.Eight }
+    Player:
+    Name:Defs.East
+    Type:Defs.Machine
+    Pos:Defs.East
+    Partner:Defs.WestPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SDiamonds; value = Defs.King }
+    { Card.suite = Defs.SDiamonds; value = Defs.Ten }
+    { Card.suite = Defs.SClubs; value = Defs.Ten }
+    { Card.suite = Defs.SDiamonds; value = Defs.Queen }
+    { Card.suite = Defs.SDiamonds; value = Defs.Nine }
+    Player:
+    Name:Defs.North
+    Type:Defs.Machine
+    Pos:Defs.North
+    Partner:Defs.SouthPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SDiamonds; value = Defs.Ace }
+    { Card.suite = Defs.SClubs; value = Defs.Seven }
+    { Card.suite = Defs.SClubs; value = Defs.Ace }
+    { Card.suite = Defs.SHearts; value = Defs.Ten }
+    { Card.suite = Defs.SDiamonds; value = Defs.Eight }
+    Player:
+    Name:Defs.West
+    Type:Defs.Machine
+    Pos:Defs.West
+    Partner:Defs.EastPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SDiamonds; value = Defs.Jack }
+    { Card.suite = Defs.SSpades; value = Defs.Ten }
+    { Card.suite = Defs.SHearts; value = Defs.Ace }
+    { Card.suite = Defs.SHearts; value = Defs.Nine }
+    { Card.suite = Defs.SSpades; value = Defs.Nine }
+    |}]
+
+let%expect_test "do_bidding_3" =
+  let test_deck =
+    [
+      (* south *)
+      Card.make SClubs Jack;
+      Card.make SSpades Nine;
+      Card.make SSpades Jack;
+      Card.make SHearts Ace;
+      Card.make SHearts Ten;
+      (* east *)
+      Card.make SDiamonds King;
+      Card.make SSpades Ace;
+      Card.make SClubs Ten;
+      Card.make SClubs Queen;
+      Card.make SClubs Ace;
+      (* north *)
+      Card.make SHearts Nine;
+      Card.make SSpades Queen;
+      Card.make SClubs Eight;
+      Card.make SDiamonds Queen;
+      Card.make SSpades Eight;
+      (* west *)
+      Card.make SDiamonds Jack;
+      Card.make SClubs Seven;
+      Card.make SHearts Queen;
+      Card.make SDiamonds Ten;
+      Card.make SHearts Eight;
+    ]
+  in
+  let game = test_setup_do_bidding test_deck in
+
+  print_endline @@ show game;
+  (* TODO: how to remove `Game.game` and just have `game` ? *)
+  [%expect
+    {|
+    Defs.East
+    0.722222 Defs.GNoTrumps
+    0.582090 Defs.GSpades
+    0.582090 Defs.GDiamonds
+    ---------
+    Defs.North
+    0.298507 Defs.GHearts
+    0.212766 Defs.GAllTrumps
+    0.111111 Defs.GNoTrumps
+    ---------
+    Defs.West
+    0.492537 Defs.GDiamonds
+    0.351064 Defs.GAllTrumps
+    0.277778 Defs.GNoTrumps
+    ---------
+    Defs.South
+    0.850746 Defs.GSpades
+    0.797872 Defs.GAllTrumps
+    0.641791 Defs.GClubs
+    ---------
+    Defs.East
+    0.722222 Defs.GNoTrumps
+    0.582090 Defs.GSpades
+    0.582090 Defs.GDiamonds
+    ---------
+    Defs.North
+    0.298507 Defs.GHearts
+    0.212766 Defs.GAllTrumps
+    0.111111 Defs.GNoTrumps
+    ---------
+    Defs.West
+    0.492537 Defs.GDiamonds
+    0.351064 Defs.GAllTrumps
+    0.277778 Defs.GNoTrumps
+    ---------
+    State: Game.SDealRest
+    Game: Defs.CNo Defs.GAllTrumps Defs.South
+    ---
+    Bid History:
+    Defs.East { Game.game = Defs.GNoTrumps; bidder = Defs.East; counter = Defs.CNo }
+    Defs.North pass
+    Defs.West pass
+    Defs.South { Game.game = Defs.GAllTrumps; bidder = Defs.South; counter = Defs.CNo }
+    Defs.East pass
+    Defs.North pass
+    Defs.West pass
+    ---
+    Players:
+    Player:
+    Name:Defs.South
+    Type:Defs.Machine
+    Pos:Defs.South
+    Partner:Defs.NorthPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SClubs; value = Defs.Jack }
+    { Card.suite = Defs.SSpades; value = Defs.Nine }
+    { Card.suite = Defs.SSpades; value = Defs.Jack }
+    { Card.suite = Defs.SHearts; value = Defs.Ace }
+    { Card.suite = Defs.SHearts; value = Defs.Ten }
+    Player:
+    Name:Defs.East
+    Type:Defs.Machine
+    Pos:Defs.East
+    Partner:Defs.WestPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SDiamonds; value = Defs.King }
+    { Card.suite = Defs.SSpades; value = Defs.Ace }
+    { Card.suite = Defs.SClubs; value = Defs.Ten }
+    { Card.suite = Defs.SClubs; value = Defs.Queen }
+    { Card.suite = Defs.SClubs; value = Defs.Ace }
+    Player:
+    Name:Defs.North
+    Type:Defs.Machine
+    Pos:Defs.North
+    Partner:Defs.SouthPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SHearts; value = Defs.Nine }
+    { Card.suite = Defs.SSpades; value = Defs.Queen }
+    { Card.suite = Defs.SClubs; value = Defs.Eight }
+    { Card.suite = Defs.SDiamonds; value = Defs.Queen }
+    { Card.suite = Defs.SSpades; value = Defs.Eight }
+    Player:
+    Name:Defs.West
+    Type:Defs.Machine
+    Pos:Defs.West
+    Partner:Defs.EastPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SDiamonds; value = Defs.Jack }
+    { Card.suite = Defs.SClubs; value = Defs.Seven }
+    { Card.suite = Defs.SHearts; value = Defs.Queen }
+    { Card.suite = Defs.SDiamonds; value = Defs.Ten }
+    { Card.suite = Defs.SHearts; value = Defs.Eight }
     |}]
