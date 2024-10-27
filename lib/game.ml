@@ -38,7 +38,7 @@ let make_players =
     match player_positions with
     | pos :: player_positions ->
         make_players player_positions (Player.make pos :: players)
-    | [] -> players
+    | [] -> List.rev players
   in
   make_players [ South; East; North; West ] []
 
@@ -73,10 +73,12 @@ let show (game : t) =
         | None -> sprintf "%s pass\n" (show_player_pos pos)
         | Some b -> sprintf "%s %s\n" (show_player_pos pos) (show_bid b))
   in
-  sprintf "State: %s\nGame: %s %s %s\nBid History:\n%s"
+  let players = List.map game.players ~f:(fun p -> Player.show p) in
+  sprintf "State: %s\nGame: %s %s %s\nBid History:\n%sPlayers:\n%s"
     (show_game_state game.state)
     counter_s chosen_game_s bidder_s
     (List.fold bid_history ~init:"" ~f:(fun acc el -> sprintf "%s%s" acc el))
+    (List.fold players ~init:"" ~f:(fun acc el -> sprintf "%s%s" acc el))
 
 let finished game =
   match game.teams with
@@ -100,9 +102,9 @@ let do_shuffle game =
 
 let rec deal_cards players card_num deck new_players =
   match players with
-  | [] -> (new_players, deck)
+  | [] -> (List.rev new_players, deck)
   | p :: players ->
-      let cards, deck = Result.ok_or_failwith (Deck.deal deck card_num) in
+      let cards, deck = Deck.deal deck card_num in
       let player = Player.store_cards p (Deck.to_cards cards) in
       deal_cards players card_num deck (player :: new_players)
 
@@ -120,6 +122,7 @@ let color_game_score trump_suite card card_value =
 let no_trumps_score _ card_value = no_trump_worth card_value
 let all_trumps_score _ card_value = trump_worth card_value
 
+(* reduce score for naked tens or nines *)
 let calc_card_score cards ~score_f =
   let rec count_score cards score =
     match cards with
@@ -384,45 +387,98 @@ let%expect_test "do_bidding" =
   let test_deck =
     [
       (* dealer cards *)
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
+      Card.make SSpades Eight;
+      Card.make SSpades Ten;
+      Card.make SSpades Ace;
+      Card.make SHearts Eight;
+      Card.make SSpades Nine;
       (* starting player *)
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
+      Card.make SSpades Queen;
+      Card.make SClubs Jack;
+      Card.make SDiamonds King;
+      Card.make SDiamonds Ace;
+      Card.make SClubs Ace;
       (* player 3 (dealer partner) *)
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
+      Card.make SHearts Ten;
+      Card.make SHearts Seven;
+      Card.make SHearts Jack;
+      Card.make SDiamonds Ten;
+      Card.make SClubs Eight;
       (* player 4 (starting player partner) *)
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
-      Card.make SSpades Jack;
+      Card.make SDiamonds Eight;
+      Card.make SSpades Seven;
+      Card.make SDiamonds Queen;
+      Card.make SHearts Ace;
+      Card.make SClubs King;
     ]
   in
   let game = make |> do_shuffle in
   let players, deck = deal_cards game.players 5 (Deck.of_cards test_deck) [] in
+  List.iter players ~f:(fun p ->
+      printf "%s " @@ show_player_pos @@ Player.pos p);
+  [%expect {| Defs.South Defs.East Defs.North Defs.West |}];
+
   let game = { game with state = SBidding; players; deck } in
   let game = do_bidding game in
+
   print_endline @@ show game;
+  (* TODO: how to remove `Game.game` and just have `game` ? *)
   [%expect
     {|
     State: Game.SDealRest
-    Game: Defs.CReCounter Defs.GSpades Defs.West
+    Game: Defs.CNo Defs.GClubs Defs.East
     Bid History:
-    Defs.East { Game.game = Defs.GSpades; bidder = Defs.East; counter = Defs.CNo }
-    Defs.North { Game.game = Defs.GSpades; bidder = Defs.North; counter = Defs.CCounter }
-    Defs.West { Game.game = Defs.GSpades; bidder = Defs.West; counter = Defs.CReCounter }
-    Defs.South pass
-    Defs.East pass
+    Defs.East { Game.game = Defs.GClubs; bidder = Defs.East; counter = Defs.CNo }
     Defs.North pass
+    Defs.West pass
+    Defs.South pass
+    Players:
+    Player:
+    Name:Defs.South
+    Type:Defs.Machine
+    Pos:Defs.South
+    Partner:Defs.NorthPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SSpades; value = Defs.Eight }
+    { Card.suite = Defs.SSpades; value = Defs.Ten }
+    { Card.suite = Defs.SSpades; value = Defs.Ace }
+    { Card.suite = Defs.SHearts; value = Defs.Eight }
+    { Card.suite = Defs.SSpades; value = Defs.Nine }
+    Player:
+    Name:Defs.East
+    Type:Defs.Machine
+    Pos:Defs.East
+    Partner:Defs.WestPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SSpades; value = Defs.Queen }
+    { Card.suite = Defs.SClubs; value = Defs.Jack }
+    { Card.suite = Defs.SDiamonds; value = Defs.King }
+    { Card.suite = Defs.SDiamonds; value = Defs.Ace }
+    { Card.suite = Defs.SClubs; value = Defs.Ace }
+    Player:
+    Name:Defs.North
+    Type:Defs.Machine
+    Pos:Defs.North
+    Partner:Defs.SouthPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SHearts; value = Defs.Ten }
+    { Card.suite = Defs.SHearts; value = Defs.Seven }
+    { Card.suite = Defs.SHearts; value = Defs.Jack }
+    { Card.suite = Defs.SDiamonds; value = Defs.Ten }
+    { Card.suite = Defs.SClubs; value = Defs.Eight }
+    Player:
+    Name:Defs.West
+    Type:Defs.Machine
+    Pos:Defs.West
+    Partner:Defs.EastPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SDiamonds; value = Defs.Eight }
+    { Card.suite = Defs.SSpades; value = Defs.Seven }
+    { Card.suite = Defs.SDiamonds; value = Defs.Queen }
+    { Card.suite = Defs.SHearts; value = Defs.Ace }
+    { Card.suite = Defs.SClubs; value = Defs.King }
     |}]

@@ -18,8 +18,17 @@ let show player =
   let announce_s =
     match player.announce with None -> "NoAnnonce" | Some s -> show_cgame s
   in
-  sprintf "%s %s %s %s %d %s" player.name type_s pos_s partner_s player.points
-    announce_s
+  let cards_s = List.map player.cards ~f:Card.show in
+  sprintf
+    "Player:\n\
+     Name:%s\n\
+     Type:%s\n\
+     Pos:%s\n\
+     Partner:%sPoints:%d\n\
+     Announce:%s\n\
+     Cards:%s\n"
+    player.name type_s pos_s partner_s player.points announce_s
+    (List.fold cards_s ~init:"" ~f:(fun acc el -> sprintf "%s\n%s" acc el))
 
 let make player_pos =
   {
