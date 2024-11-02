@@ -1,4 +1,4 @@
-type csuite = SClubs | SDiamonds | SHearts | SSpades [@@deriving show]
+type csuite = SClubs | SDiamonds | SHearts | SSpades [@@deriving show, enum]
 
 type cgame = GClubs | GDiamonds | GHearts | GSpades | GNoTrumps | GAllTrumps
 [@@deriving show, enum]
@@ -6,7 +6,7 @@ type cgame = GClubs | GDiamonds | GHearts | GSpades | GNoTrumps | GAllTrumps
 type ccounter = CNo | CCounter | CReCounter [@@deriving show]
 
 type cvalue = Seven | Eight | Nine | Ten | Jack | Queen | King | Ace
-[@@deriving show]
+[@@deriving show, enum]
 
 type ccombination =
   | Belot
@@ -58,16 +58,6 @@ let no_trump_worth = function
   | King -> 4
   | Ten -> 10
   | Ace -> 11
-
-let combination_order = function
-  | Seven -> 1
-  | Eight -> 2
-  | Nine -> 3
-  | Ten -> 4
-  | Jack -> 5
-  | Queen -> 6
-  | King -> 7
-  | Ace -> 8
 
 let combination_worth = function
   | Belot -> 20

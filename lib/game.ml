@@ -268,15 +268,29 @@ let do_deal_rest game =
   let players, deck = deal_cards game.players 3 game.deck [] in
   { game with state = SPlay; deck; players }
 
-let find_same_value_cards cards value =
-  List.filter cards ~f:(fun c -> Card.value c = value)
-
 let find_carre_combinations cards =
-  (*let sorted = List.sort_and_group cards ~compare:(fun c1 c2 -> combination_order Card.value *)
-  let found =
-    List.map cards ~f:(fun c -> find_same_value_cards cards (Card.value c))
+  let sorted =
+    List.sort_and_group cards ~compare:(fun c1 c2 ->
+        let c1_int = cvalue_to_enum @@ Card.value c1 in
+        let c2_int = cvalue_to_enum @@ Card.value c2 in
+        if c1_int < c2_int then -1 else if c1_int > c2_int then 1 else 0)
   in
-  List.filter found ~f:(fun same_list -> List.length same_list = 4)
+  List.filter sorted ~f:(fun same_list -> List.length same_list = 4)
+
+let find_consecutive_combinations cards =
+  let grouped =
+    List.group cards ~break:(fun c1 c2 -> Card.suite c1 = Card.suite c2)
+  in
+  let sorted =
+    List.map grouped ~f:(fun c ->
+        List.sort c ~compare:(fun c1 c2 ->
+            let c1_int = cvalue_to_enum @@ Card.value c1 in
+            let c2_int = cvalue_to_enum @@ Card.value c2 in
+            if c1_int < c2_int then -1 else if c1_int > c2_int then 1 else 0))
+  in
+  let _ = sorted in
+  (* TODO: finish this *)
+  []
 
 let announce_combination player =
   let cards = Player.cards player in
@@ -1026,26 +1040,6 @@ let%expect_test "announce_combination" =
          sprintf "%s\n%s" acc (show_ccombination el));
   [%expect {||}]
 
-let%expect_test "find_same_value" =
-  let cards =
-    [
-      Card.make SClubs Jack;
-      Card.make SSpades Jack;
-      Card.make SHearts Queen;
-      Card.make SHearts Ace;
-      Card.make SHearts Ten;
-    ]
-  in
-  let jacks = find_same_value_cards cards Jack in
-  printf "%s"
-  @@ List.fold jacks ~init:"" ~f:(fun acc el ->
-         sprintf "%s\n%s" acc (Card.show el));
-  [%expect
-    {|
-    { Card.suite = Defs.SClubs; value = Defs.Jack }
-    { Card.suite = Defs.SSpades; value = Defs.Jack }
-    |}]
-
 let%expect_test "find_carre_combinations:no carre" =
   let cards =
     [
@@ -1073,6 +1067,28 @@ let%expect_test "find_carre_combinations:carre of jacks" =
     ]
   in
   let combinations = find_carre_combinations cards in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_card_list el));
+  [%expect
+    {|
+    { Card.suite = Defs.SClubs; value = Defs.Jack }
+    { Card.suite = Defs.SSpades; value = Defs.Jack }
+    { Card.suite = Defs.SHearts; value = Defs.Jack }
+    { Card.suite = Defs.SDiamonds; value = Defs.Jack }
+    |}]
+
+let%expect_test "find_consecutive_combinations:no combinations" =
+  let cards =
+    [
+      Card.make SClubs Jack;
+      Card.make SSpades Jack;
+      Card.make SHearts Jack;
+      Card.make SDiamonds Queen;
+      Card.make SHearts Ten;
+    ]
+  in
+  let combinations = find_consecutive_combinations cards in
   printf "%s"
   @@ List.fold combinations ~init:"" ~f:(fun acc el ->
          sprintf "%s\n%s" acc (show_card_list el));
