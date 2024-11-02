@@ -16,6 +16,7 @@ type ccombination =
   | Carre
   | Carre9s
   | CarreJs
+[@@deriving show]
 
 (* TODO: these should be maps? *)
 let trump_order = function

@@ -1,5 +1,6 @@
 open! Core
 open Defs
+open Cards
 open! Poly
 
 (* TODO: read those from a config file *)
@@ -266,6 +267,21 @@ let do_bidding game =
 let do_deal_rest game =
   let players, deck = deal_cards game.players 3 game.deck [] in
   { game with state = SPlay; deck; players }
+
+let find_same_value_cards cards value =
+  List.filter cards ~f:(fun c -> Card.value c = value)
+
+let find_carre_combinations cards =
+  (*let sorted = List.sort_and_group cards ~compare:(fun c1 c2 -> combination_order Card.value *)
+  let found =
+    List.map cards ~f:(fun c -> find_same_value_cards cards (Card.value c))
+  in
+  List.filter found ~f:(fun same_list -> List.length same_list = 4)
+
+let announce_combination player =
+  let cards = Player.cards player in
+  let _ = cards in
+  []
 
 (* TODO: implement these *)
 let do_play game = { game with state = SCalcScore }
@@ -862,3 +878,202 @@ let%expect_test "do_bidding_3" =
     { Card.suite = Defs.SDiamonds; value = Defs.Ten }
     { Card.suite = Defs.SHearts; value = Defs.Eight }
     |}]
+
+let%expect_test "do_bidding_4" =
+  let test_deck =
+    [
+      (* south *)
+      Card.make SClubs Jack;
+      Card.make SHearts Eight;
+      Card.make SHearts Queen;
+      Card.make SHearts Ace;
+      Card.make SHearts Ten;
+      (* east *)
+      Card.make SClubs Nine;
+      Card.make SClubs Jack;
+      Card.make SClubs Ten;
+      Card.make SClubs King;
+      Card.make SClubs Ace;
+      (* north *)
+      Card.make SHearts Nine;
+      Card.make SSpades Queen;
+      Card.make SDiamonds Eight;
+      Card.make SDiamonds Queen;
+      Card.make SSpades Eight;
+      (* west *)
+      Card.make SDiamonds Jack;
+      Card.make SDiamonds Nine;
+      Card.make SDiamonds Ace;
+      Card.make SDiamonds Ten;
+      Card.make SDiamonds King;
+    ]
+  in
+  let game = test_setup_do_bidding test_deck in
+
+  print_endline @@ show game;
+  (* TODO: how to remove `Game.game` and just have `game` ? *)
+  [%expect
+    {|
+    Defs.East
+    0.880597 Defs.GClubs
+    0.627660 Defs.GAllTrumps
+    0.500000 Defs.GNoTrumps
+    ---------
+    Defs.North
+    0.298507 Defs.GHearts
+    0.212766 Defs.GAllTrumps
+    0.111111 Defs.GNoTrumps
+    ---------
+    Defs.West
+    0.880597 Defs.GDiamonds
+    0.627660 Defs.GAllTrumps
+    0.500000 Defs.GNoTrumps
+    ---------
+    Defs.South
+    0.656716 Defs.GClubs
+    0.481481 Defs.GNoTrumps
+    0.468085 Defs.GAllTrumps
+    ---------
+    Defs.East
+    0.880597 Defs.GClubs
+    0.627660 Defs.GAllTrumps
+    0.500000 Defs.GNoTrumps
+    ---------
+    Defs.North
+    0.298507 Defs.GHearts
+    0.212766 Defs.GAllTrumps
+    0.111111 Defs.GNoTrumps
+    ---------
+    Defs.West
+    0.880597 Defs.GDiamonds
+    0.627660 Defs.GAllTrumps
+    0.500000 Defs.GNoTrumps
+    ---------
+    Defs.South
+    0.656716 Defs.GClubs
+    0.481481 Defs.GNoTrumps
+    0.468085 Defs.GAllTrumps
+    ---------
+    State: Game.SDealRest
+    Game: Defs.CNo Defs.GAllTrumps Defs.East
+    ---
+    Bid History:
+    Defs.East { Game.game = Defs.GClubs; bidder = Defs.East; counter = Defs.CNo }
+    Defs.North pass
+    Defs.West { Game.game = Defs.GDiamonds; bidder = Defs.West; counter = Defs.CNo }
+    Defs.South pass
+    Defs.East { Game.game = Defs.GAllTrumps; bidder = Defs.East; counter = Defs.CNo }
+    Defs.North pass
+    Defs.West pass
+    Defs.South pass
+    ---
+    Players:
+    Player:
+    Name:Defs.South
+    Type:Defs.Machine
+    Pos:Defs.South
+    Partner:Defs.NorthPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SClubs; value = Defs.Jack }
+    { Card.suite = Defs.SHearts; value = Defs.Eight }
+    { Card.suite = Defs.SHearts; value = Defs.Queen }
+    { Card.suite = Defs.SHearts; value = Defs.Ace }
+    { Card.suite = Defs.SHearts; value = Defs.Ten }
+    Player:
+    Name:Defs.East
+    Type:Defs.Machine
+    Pos:Defs.East
+    Partner:Defs.WestPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SClubs; value = Defs.Nine }
+    { Card.suite = Defs.SClubs; value = Defs.Jack }
+    { Card.suite = Defs.SClubs; value = Defs.Ten }
+    { Card.suite = Defs.SClubs; value = Defs.King }
+    { Card.suite = Defs.SClubs; value = Defs.Ace }
+    Player:
+    Name:Defs.North
+    Type:Defs.Machine
+    Pos:Defs.North
+    Partner:Defs.SouthPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SHearts; value = Defs.Nine }
+    { Card.suite = Defs.SSpades; value = Defs.Queen }
+    { Card.suite = Defs.SDiamonds; value = Defs.Eight }
+    { Card.suite = Defs.SDiamonds; value = Defs.Queen }
+    { Card.suite = Defs.SSpades; value = Defs.Eight }
+    Player:
+    Name:Defs.West
+    Type:Defs.Machine
+    Pos:Defs.West
+    Partner:Defs.EastPoints:0
+    Announce:NoAnnonce
+    Cards:
+    { Card.suite = Defs.SDiamonds; value = Defs.Jack }
+    { Card.suite = Defs.SDiamonds; value = Defs.Nine }
+    { Card.suite = Defs.SDiamonds; value = Defs.Ace }
+    { Card.suite = Defs.SDiamonds; value = Defs.Ten }
+    { Card.suite = Defs.SDiamonds; value = Defs.King }
+    |}]
+
+let%expect_test "announce_combination" =
+  let player = Player.make South in
+  let combinations = announce_combination player in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {||}]
+
+let%expect_test "find_same_value" =
+  let cards =
+    [
+      Card.make SClubs Jack;
+      Card.make SSpades Jack;
+      Card.make SHearts Queen;
+      Card.make SHearts Ace;
+      Card.make SHearts Ten;
+    ]
+  in
+  let jacks = find_same_value_cards cards Jack in
+  printf "%s"
+  @@ List.fold jacks ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (Card.show el));
+  [%expect
+    {|
+    { Card.suite = Defs.SClubs; value = Defs.Jack }
+    { Card.suite = Defs.SSpades; value = Defs.Jack }
+    |}]
+
+let%expect_test "find_carre_combinations:no carre" =
+  let cards =
+    [
+      Card.make SClubs Jack;
+      Card.make SSpades Jack;
+      Card.make SHearts Jack;
+      Card.make SDiamonds Ace;
+      Card.make SHearts Ten;
+    ]
+  in
+  let combinations = find_carre_combinations cards in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_card_list el));
+  [%expect {| |}]
+
+let%expect_test "find_carre_combinations:carre of jacks" =
+  let cards =
+    [
+      Card.make SClubs Jack;
+      Card.make SSpades Jack;
+      Card.make SHearts Jack;
+      Card.make SDiamonds Jack;
+      Card.make SHearts Ten;
+    ]
+  in
+  let combinations = find_carre_combinations cards in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_card_list el));
+  [%expect {| |}]
