@@ -1,6 +1,7 @@
 open! Core
 open Defs
 open! Poly
+open! Cards
 
 (* TODO: read those from a config file *)
 (* TODO: every round apply a small randomness to these numbers to imitate the
@@ -269,7 +270,8 @@ let do_deal_rest game =
 
 let announce_combination player =
   let cards = Player.cards player in
-  let _ = cards in
+  let combos = find_best_combination cards in
+  let _ = combos in
   []
 
 (* TODO: implement these *)

@@ -43,7 +43,20 @@ let find_consecutive_combinations cards =
         List.filter combos ~f:(fun c -> List.length c >= 3))
   in
   (* return a single list of all combinations *)
+  (* TODO: return type of combo with the value inside for example Tierce(King) or Carre(Nine) *)
   List.fold combinations ~init:[] ~f:(fun acc el -> acc @ el)
+
+let find_best_combination cards =
+  let carre = find_carre_combinations cards in
+  let num_carre = List.length carre in
+  let consec = find_consecutive_combinations cards in
+  match num_carre with
+  | 2 -> carre (* no other combo is possible (no cards left)*)
+  | 0 -> consec (* no carre -> only consecutive combos possible *)
+  | 1 ->
+      failwith "not implemented"
+      (* TODO: check if a card appears in both carre and combo and return only the highest of them both *)
+  | _ -> failwith (sprintf "allowed carre combos [0, 2] but got %d" num_carre)
 
 let%expect_test "find_carre_combinations:no carre" =
   let cards =
@@ -77,6 +90,36 @@ let%expect_test "find_carre_combinations:carre of jacks" =
          sprintf "%s\n%s" acc (show_card_list el));
   [%expect
     {|
+    { Card.suite = Defs.SClubs; value = Defs.Jack }
+    { Card.suite = Defs.SSpades; value = Defs.Jack }
+    { Card.suite = Defs.SHearts; value = Defs.Jack }
+    { Card.suite = Defs.SDiamonds; value = Defs.Jack }
+    |}]
+
+let%expect_test "find_carre_combinations:2 carre" =
+  let cards =
+    [
+      Card.make SClubs Jack;
+      Card.make SSpades Jack;
+      Card.make SHearts Jack;
+      Card.make SDiamonds Jack;
+      Card.make SHearts Ten;
+      Card.make SSpades Ten;
+      Card.make SClubs Ten;
+      Card.make SDiamonds Ten;
+    ]
+  in
+  let combinations = find_carre_combinations cards in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_card_list el));
+  [%expect
+    {|
+    { Card.suite = Defs.SHearts; value = Defs.Ten }
+    { Card.suite = Defs.SSpades; value = Defs.Ten }
+    { Card.suite = Defs.SClubs; value = Defs.Ten }
+    { Card.suite = Defs.SDiamonds; value = Defs.Ten }
+
     { Card.suite = Defs.SClubs; value = Defs.Jack }
     { Card.suite = Defs.SSpades; value = Defs.Jack }
     { Card.suite = Defs.SHearts; value = Defs.Jack }
