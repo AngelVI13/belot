@@ -86,6 +86,12 @@ let find_consecutive_combinations cards =
       | 5 -> Quinte start_value
       | _ -> failwith @@ sprintf "unexpected combination length: %d" combo_len)
 
+(* NOTE:
+   Detailed examplanation of the rules:
+   https://computergames.alle.bg/%D0%B8%D0%B3%D1%80%D0%B8-%D1%81-%D0%BA%D0%B0%D1%80%D1%82%D0%B8/%D0%B1%D0%B5%D0%BB%D0%BE%D1%82/
+   The combinations specifics are revealed at end of the game so
+   the player doesn't know what the oponents combinations are
+*)
 let find_best_combination cards =
   let carre = find_carre_combinations cards in
   let num_carre = List.length carre in
