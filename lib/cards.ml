@@ -14,7 +14,10 @@ let find_carre_combinations cards =
         let c2_int = cvalue_to_enum @@ Card.value c2 in
         if c1_int < c2_int then -1 else if c1_int > c2_int then 1 else 0)
   in
-  List.filter sorted ~f:(fun same_list -> List.length same_list = 4)
+  let carres =
+    List.filter sorted ~f:(fun same_list -> List.length same_list = 4)
+  in
+  List.map carres ~f:(fun carre -> Carre (Card.value @@ List.nth_exn carre 0))
 
 let find_consecutive_combinations cards =
   (* group all cards by suit *)
@@ -42,9 +45,28 @@ let find_consecutive_combinations cards =
     List.map combinations ~f:(fun combos ->
         List.filter combos ~f:(fun c -> List.length c >= 3))
   in
-  (* return a single list of all combinations *)
-  (* TODO: return type of combo with the value inside for example Tierce(King) or Carre(Nine) *)
-  List.fold combinations ~init:[] ~f:(fun acc el -> acc @ el)
+  (* split long combinations to parts -
+     6 consecutive -> 1 Quinte and drop lowest card
+     8 consecutive - > 1 Quinte and 1 Tierce
+  *)
+  (* TODO: finish this *)
+  (*let combinations =*)
+  (*  List.map combinations ~f:(fun combos ->*)
+  (*      List.filter combos ~f:(fun c -> List.length c >= 3))*)
+  (*in*)
+  (* flatten to a single list of all combinations *)
+  let combinations =
+    List.fold combinations ~init:[] ~f:(fun acc el -> acc @ el)
+  in
+  (* transform list of combinations to combination types *)
+  List.map combinations ~f:(fun combo ->
+      let combo_len = List.length combo in
+      let start_value = Card.value @@ List.nth_exn combo 0 in
+      match combo_len with
+      | 3 -> Tierce start_value
+      | 4 -> Quarte start_value
+      | 5 -> Quinte start_value
+      | _ -> failwith @@ sprintf "unexpected combination length: %d" combo_len)
 
 let find_best_combination cards =
   let carre = find_carre_combinations cards in
@@ -71,7 +93,7 @@ let%expect_test "find_carre_combinations:no carre" =
   let combinations = find_carre_combinations cards in
   printf "%s"
   @@ List.fold combinations ~init:"" ~f:(fun acc el ->
-         sprintf "%s\n%s" acc (show_card_list el));
+         sprintf "%s\n%s" acc (show_ccombination el));
   [%expect {| |}]
 
 let%expect_test "find_carre_combinations:carre of jacks" =
@@ -87,14 +109,8 @@ let%expect_test "find_carre_combinations:carre of jacks" =
   let combinations = find_carre_combinations cards in
   printf "%s"
   @@ List.fold combinations ~init:"" ~f:(fun acc el ->
-         sprintf "%s\n%s" acc (show_card_list el));
-  [%expect
-    {|
-    { Card.suite = Defs.SClubs; value = Defs.Jack }
-    { Card.suite = Defs.SSpades; value = Defs.Jack }
-    { Card.suite = Defs.SHearts; value = Defs.Jack }
-    { Card.suite = Defs.SDiamonds; value = Defs.Jack }
-    |}]
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {| (Defs.Carre Defs.Jack) |}]
 
 let%expect_test "find_carre_combinations:2 carre" =
   let cards =
@@ -112,18 +128,10 @@ let%expect_test "find_carre_combinations:2 carre" =
   let combinations = find_carre_combinations cards in
   printf "%s"
   @@ List.fold combinations ~init:"" ~f:(fun acc el ->
-         sprintf "%s\n%s" acc (show_card_list el));
-  [%expect
-    {|
-    { Card.suite = Defs.SHearts; value = Defs.Ten }
-    { Card.suite = Defs.SSpades; value = Defs.Ten }
-    { Card.suite = Defs.SClubs; value = Defs.Ten }
-    { Card.suite = Defs.SDiamonds; value = Defs.Ten }
-
-    { Card.suite = Defs.SClubs; value = Defs.Jack }
-    { Card.suite = Defs.SSpades; value = Defs.Jack }
-    { Card.suite = Defs.SHearts; value = Defs.Jack }
-    { Card.suite = Defs.SDiamonds; value = Defs.Jack }
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {|
+    (Defs.Carre Defs.Ten)
+    (Defs.Carre Defs.Jack)
     |}]
 
 let%expect_test "find_consecutive_combinations:one combo" =
@@ -142,14 +150,8 @@ let%expect_test "find_consecutive_combinations:one combo" =
   let combinations = find_consecutive_combinations cards in
   printf "%s"
   @@ List.fold combinations ~init:"" ~f:(fun acc el ->
-         sprintf "%s\n%s" acc (show_card_list el));
-  [%expect
-    {|
-    { Card.suite = Defs.SHearts; value = Defs.Nine }
-    { Card.suite = Defs.SHearts; value = Defs.Ten }
-    { Card.suite = Defs.SHearts; value = Defs.Jack }
-    { Card.suite = Defs.SHearts; value = Defs.Queen }
-    |}]
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {| (Defs.Quarte Defs.Nine) |}]
 
 let%expect_test "find_consecutive_combinations:2 combos from different colors" =
   let cards =
@@ -167,16 +169,10 @@ let%expect_test "find_consecutive_combinations:2 combos from different colors" =
   let combinations = find_consecutive_combinations cards in
   printf "%s"
   @@ List.fold combinations ~init:"" ~f:(fun acc el ->
-         sprintf "%s\n%s" acc (show_card_list el));
-  [%expect
-    {|
-    { Card.suite = Defs.SClubs; value = Defs.Jack }
-    { Card.suite = Defs.SClubs; value = Defs.Queen }
-    { Card.suite = Defs.SClubs; value = Defs.King }
-
-    { Card.suite = Defs.SHearts; value = Defs.Ten }
-    { Card.suite = Defs.SHearts; value = Defs.Jack }
-    { Card.suite = Defs.SHearts; value = Defs.Queen }
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {|
+    (Defs.Tierce Defs.Jack)
+    (Defs.Tierce Defs.Ten)
     |}]
 
 let%expect_test "find_consecutive_combinations:2 combos from same color" =
@@ -195,16 +191,10 @@ let%expect_test "find_consecutive_combinations:2 combos from same color" =
   let combinations = find_consecutive_combinations cards in
   printf "%s"
   @@ List.fold combinations ~init:"" ~f:(fun acc el ->
-         sprintf "%s\n%s" acc (show_card_list el));
-  [%expect
-    {|
-    { Card.suite = Defs.SHearts; value = Defs.Seven }
-    { Card.suite = Defs.SHearts; value = Defs.Eight }
-    { Card.suite = Defs.SHearts; value = Defs.Nine }
-
-    { Card.suite = Defs.SHearts; value = Defs.Queen }
-    { Card.suite = Defs.SHearts; value = Defs.King }
-    { Card.suite = Defs.SHearts; value = Defs.Ace }
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {|
+    (Defs.Tierce Defs.Seven)
+    (Defs.Tierce Defs.Queen)
     |}]
 
 let%expect_test "find_consecutive_combinations:no combos" =
@@ -223,5 +213,27 @@ let%expect_test "find_consecutive_combinations:no combos" =
   let combinations = find_consecutive_combinations cards in
   printf "%s"
   @@ List.fold combinations ~init:"" ~f:(fun acc el ->
-         sprintf "%s\n%s" acc (show_card_list el));
+         sprintf "%s\n%s" acc (show_ccombination el));
   [%expect {| |}]
+
+let%expect_test "find_consecutive_combinations:8 consecutive from same color" =
+  let cards =
+    [
+      Card.make SHearts Seven;
+      Card.make SHearts Eight;
+      Card.make SHearts Nine;
+      Card.make SHearts Ten;
+      Card.make SHearts Jack;
+      Card.make SHearts Queen;
+      Card.make SHearts King;
+      Card.make SHearts Ace;
+    ]
+  in
+  let combinations = find_consecutive_combinations cards in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {|
+    (Defs.Tierce Defs.Seven)
+    (Defs.Tierce Defs.Queen)
+    |}]

@@ -10,12 +10,10 @@ type cvalue = Seven | Eight | Nine | Ten | Jack | Queen | King | Ace
 
 type ccombination =
   | Belot
-  | Tierce
-  | Quarte
-  | Quinte
-  | Carre
-  | Carre9s
-  | CarreJs
+  | Tierce of cvalue
+  | Quarte of cvalue
+  | Quinte of cvalue
+  | Carre of cvalue
 [@@deriving show]
 
 (* TODO: these should be maps? *)
@@ -61,12 +59,10 @@ let no_trump_worth = function
 
 let combination_worth = function
   | Belot -> 20
-  | Tierce -> 20
-  | Quarte -> 50
-  | Quinte -> 100
-  | Carre -> 100
-  | Carre9s -> 150
-  | CarreJs -> 200
+  | Tierce _ -> 20
+  | Quarte _ -> 50
+  | Quinte _ -> 100
+  | Carre _ -> 100
 
 type player_pos = North | West | South | East [@@deriving show, enum]
 type player_type = Human | Machine [@@deriving show]
