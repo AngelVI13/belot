@@ -15,7 +15,11 @@ let find_carre_combinations cards =
         if c1_int < c2_int then -1 else if c1_int > c2_int then 1 else 0)
   in
   let carres =
-    List.filter sorted ~f:(fun same_list -> List.length same_list = 4)
+    List.filter sorted ~f:(fun same_list ->
+        List.length same_list = 4
+        (* do not carres cant be from Seven & Eight *)
+        && cvalue_to_enum @@ Card.value (List.nth_exn same_list 0)
+           > cvalue_to_enum Eight)
   in
   List.map carres ~f:(fun carre -> Carre (Card.value @@ List.nth_exn carre 0))
 
@@ -45,15 +49,29 @@ let find_consecutive_combinations cards =
     List.map combinations ~f:(fun combos ->
         List.filter combos ~f:(fun c -> List.length c >= 3))
   in
+
   (* split long combinations to parts -
      6 consecutive -> 1 Quinte and drop lowest card
      8 consecutive - > 1 Quinte and 1 Tierce
   *)
-  (* TODO: finish this *)
-  (*let combinations =*)
-  (*  List.map combinations ~f:(fun combos ->*)
-  (*      List.filter combos ~f:(fun c -> List.length c >= 3))*)
-  (*in*)
+  let combinations =
+    List.map combinations ~f:(fun combos ->
+        List.fold combos ~init:[] ~f:(fun acc combo ->
+            let c_len = List.length combo in
+            let updated_combos =
+              match c_len with
+              | 8 ->
+                  (* max cards in a hand is 8 -> split to tierce and quinte *)
+                  let tierce, quinte = List.split_n combo 3 in
+                  [ tierce; quinte ]
+              | 6 | 7 ->
+                  (* drop lowest X cards in order to form the highest quinte combo *)
+                  [ List.drop combo (c_len - 5) ]
+              | _ -> [ combo ]
+            in
+            acc @ updated_combos))
+  in
+
   (* flatten to a single list of all combinations *)
   let combinations =
     List.fold combinations ~init:[] ~f:(fun acc el -> acc @ el)
@@ -111,6 +129,25 @@ let%expect_test "find_carre_combinations:carre of jacks" =
   @@ List.fold combinations ~init:"" ~f:(fun acc el ->
          sprintf "%s\n%s" acc (show_ccombination el));
   [%expect {| (Defs.Carre Defs.Jack) |}]
+
+let%expect_test "find_carre_combinations:carre of sevens & eights" =
+  let cards =
+    [
+      Card.make SClubs Seven;
+      Card.make SSpades Seven;
+      Card.make SHearts Seven;
+      Card.make SDiamonds Seven;
+      Card.make SClubs Eight;
+      Card.make SSpades Eight;
+      Card.make SHearts Eight;
+      Card.make SDiamonds Eight;
+    ]
+  in
+  let combinations = find_carre_combinations cards in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {| |}]
 
 let%expect_test "find_carre_combinations:2 carre" =
   let cards =
@@ -235,5 +272,5 @@ let%expect_test "find_consecutive_combinations:8 consecutive from same color" =
          sprintf "%s\n%s" acc (show_ccombination el));
   [%expect {|
     (Defs.Tierce Defs.Seven)
-    (Defs.Tierce Defs.Queen)
+    (Defs.Quinte Defs.Ten)
     |}]
