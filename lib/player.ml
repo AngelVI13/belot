@@ -46,3 +46,8 @@ let store_combos player combinations = { player with combinations }
 let new_round player = { player with cards = []; combinations = [] }
 let cards player = player.cards
 let pos player = player.pos
+
+let play_card player =
+  match player.cards with
+  | card :: cards -> ({ player with cards }, card)
+  | [] -> failwith "can't play a card, not enough cards"

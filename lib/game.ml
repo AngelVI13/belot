@@ -64,7 +64,7 @@ let show (game : t) =
         | Some b -> sprintf "%s %s\n" (show_player_pos pos) (show_bid b))
   in
   let players = List.map game.players ~f:(fun p -> Player.show p) in
-  sprintf "State: %s\nGame: %s %s %s\n---\nBid History:\n%s---\nPlayers:\n%s"
+  sprintf "1State: %s\nGame: %s %s %s\n---\nBid History:\n%s---\nPlayers:\n%s"
     (show_game_state game.state)
     counter_s chosen_game_s bidder_s
     (List.fold bid_history ~init:"" ~f:(fun acc el -> sprintf "%s%s" acc el))
@@ -112,9 +112,6 @@ let do_bidding game =
       let player = List.nth_exn game.players player_idx in
       let player_pos = Player.pos player in
       let player_bid = best_bid (Player.cards player) current_bid player_pos in
-      (*printf "%b %d %s %d"*)
-      (*  (Option.is_some player_bid)*)
-      (*  player_idx (show_ccounter counter) num_passes;*)
       let next_player = next_player_idx player_idx in
       match player_bid with
       (* None is considered a pass -> pass on the current bid and current counter *)
@@ -142,10 +139,42 @@ let do_deal_rest game =
 let announce_combination player =
   let cards = Player.cards player in
   let combos = find_best_combination cards in
-  (Player.store_combos player combos, combos)
+  Player.store_combos player combos
+
+(* TODO: this is wrong. Somehow need to update game.players without rotating them *)
+let rec play_trick players player_idx new_players hand =
+  if List.length hand = 4 then (new_players, hand)
+  else
+    let player = List.nth_exn players player_idx in
+    let player, card = Player.play_card player in
+
+    (* keep hand cards in order *)
+    let hand = hand @ [ card ] in
+    let new_players = new_players @ [ player ] in
+    let next_player = next_player_idx player_idx in
+
+    play_trick players next_player new_players hand
+
+let rec play_round game trick_num =
+  if trick_num = 8 then game
+  else
+    let players =
+      match trick_num with
+      | 0 -> List.map game.players ~f:announce_combination
+      | _ -> game.players
+    in
+    let new_players, hand = play_trick game.players game.dealer_idx [] [] in
+    (* TODO: the order of new players is not the same as game.players - FIX IT *)
+    assert false;
+    let _, _ = (new_players, hand) in
+    let game = { game with players } in
+    play_round game (trick_num + 1)
 
 (* TODO: implement these *)
-let do_play game = { game with state = SCalcScore }
+let do_play game =
+  let game = play_round game 0 in
+  { game with state = SCalcScore }
+
 let do_calc_score game = { game with state = SShuffle }
 
 let rec play game =
@@ -251,7 +280,7 @@ let%expect_test "do_bidding_1" =
   (* TODO: how to remove `Game.game` and just have `game` ? *)
   [%expect
     {|
-    State: Game.SDealRest
+    1State: Game.SDealRest
     Game: Defs.CNo Defs.GAllTrumps Defs.East
     ---
     Bid History:
@@ -380,7 +409,7 @@ let%expect_test "do_bidding_2" =
     0.477612 Defs.GSpades
     0.477612 Defs.GDiamonds
     ---------
-    State: Game.SDealRest
+    1State: Game.SDealRest
     Game: Defs.CNo Defs.GAllTrumps Defs.West
     ---
     Bid History:
@@ -512,7 +541,7 @@ let%expect_test "do_bidding_3" =
     0.351064 Defs.GAllTrumps
     0.277778 Defs.GNoTrumps
     ---------
-    State: Game.SDealRest
+    1State: Game.SDealRest
     Game: Defs.CNo Defs.GAllTrumps Defs.South
     ---
     Bid History:
@@ -650,7 +679,7 @@ let%expect_test "do_bidding_4" =
     0.481481 Defs.GNoTrumps
     0.468085 Defs.GAllTrumps
     ---------
-    State: Game.SDealRest
+    1State: Game.SDealRest
     Game: Defs.CNo Defs.GAllTrumps Defs.East
     ---
     Bid History:
