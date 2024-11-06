@@ -141,19 +141,32 @@ let announce_combination player =
   let combos = find_best_combination cards in
   Player.store_combos player combos
 
-(* TODO: this is wrong. Somehow need to update game.players without rotating them *)
-let rec play_trick players player_idx new_players hand =
-  if List.length hand = 4 then (new_players, hand)
-  else
-    let player = List.nth_exn players player_idx in
-    let player, card = Player.play_card player in
+let play_trick players player_idx =
+  let rec play_trick_aux players player_idx new_players hand =
+    if List.length hand = 4 then (new_players, hand)
+    else
+      let player = List.nth_exn players player_idx in
+      let player, card = Player.play_card player in
 
-    (* keep hand cards in order *)
-    let hand = hand @ [ card ] in
-    let new_players = new_players @ [ player ] in
-    let next_player = next_player_idx player_idx in
+      (* keep hand cards in order *)
+      let hand = hand @ [ card ] in
+      let new_players = new_players @ [ player ] in
+      let next_player = next_player_idx player_idx in
+      play_trick_aux players next_player new_players hand
+  in
 
-    play_trick players next_player new_players hand
+  play_trick_aux players player_idx [] []
+
+let one_rot l =
+  let rec iterate acc = function
+    | [] -> []
+    | [ x ] -> x :: List.rev acc
+    | x :: l -> iterate (x :: acc) l
+  in
+  iterate [] l
+
+let rec rotate n l = match n with 0 -> l | _ -> rotate (n - 1) (one_rot l)
+(* TODO: test if this works for rotating the players after play_trick *)
 
 let rec play_round game trick_num =
   if trick_num = 8 then game
@@ -163,9 +176,10 @@ let rec play_round game trick_num =
       | 0 -> List.map game.players ~f:announce_combination
       | _ -> game.players
     in
-    let new_players, hand = play_trick game.players game.dealer_idx [] [] in
+    (* TODO: the dealer_idx+1 should be used only for the first trick, afterwards its whoever won the last trick *)
+    let start_player_idx = next_player_idx game.dealer_idx in
+    let new_players, hand = play_trick game.players start_player_idx in
     (* TODO: the order of new players is not the same as game.players - FIX IT *)
-    assert false;
     let _, _ = (new_players, hand) in
     let game = { game with players } in
     play_round game (trick_num + 1)
@@ -759,7 +773,7 @@ let%expect_test "announce_combination" =
   in
   let player = Player.store_cards player cards in
 
-  let player, _ = announce_combination player in
+  let player = announce_combination player in
   printf "%s" @@ Player.show player;
   [%expect
     {|
