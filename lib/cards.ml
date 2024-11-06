@@ -100,8 +100,25 @@ let find_best_combination cards =
   | 2 -> carre (* no other combo is possible (no cards left)*)
   | 0 -> consec (* no carre -> only consecutive combos possible *)
   | 1 ->
-      failwith "not implemented"
-      (* TODO: check if a card appears in both carre and combo and return only the highest of them both *)
+      let carre_card =
+        match List.nth_exn carre 0 with
+        | Carre value -> cvalue_to_enum value
+        | _ -> failwith "unexpected type"
+      in
+      (* remove any consecutive combinations that contain the carre card *)
+      let consec =
+        List.filter consec ~f:(fun combo ->
+            let start_card, num_cards =
+              match combo with
+              | Tierce start_card -> (cvalue_to_enum start_card, 3)
+              | Quarte start_card -> (cvalue_to_enum start_card, 4)
+              (* Quarte is maximum combo that can be affected by a carre (4 + 4 cards) *)
+              | _ -> failwith "unexpected combination type"
+            in
+            let end_card = start_card + num_cards in
+            carre_card < start_card || carre_card > end_card)
+      in
+      carre @ consec
   | _ -> failwith (sprintf "allowed carre combos [0, 2] but got %d" num_carre)
 
 let%expect_test "find_carre_combinations:no carre" =
@@ -273,6 +290,112 @@ let%expect_test "find_consecutive_combinations:8 consecutive from same color" =
     ]
   in
   let combinations = find_consecutive_combinations cards in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {|
+    (Defs.Tierce Defs.Seven)
+    (Defs.Quinte Defs.Ten)
+    |}]
+
+let%expect_test "find_best_combination:2 carre" =
+  let cards =
+    [
+      Card.make SClubs Queen;
+      Card.make SSpades Queen;
+      Card.make SHearts Queen;
+      Card.make SDiamonds Queen;
+      Card.make SHearts Nine;
+      Card.make SSpades Nine;
+      Card.make SClubs Nine;
+      Card.make SDiamonds Nine;
+    ]
+  in
+  let combinations = find_best_combination cards in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {|
+    (Defs.Carre Defs.Nine)
+    (Defs.Carre Defs.Queen)
+    |}]
+
+let%expect_test "find_best_combination:1 carre & no combos" =
+  let cards =
+    [
+      Card.make SClubs Queen;
+      Card.make SSpades Queen;
+      Card.make SHearts Queen;
+      Card.make SDiamonds Queen;
+      Card.make SHearts Nine;
+      Card.make SSpades Ten;
+      Card.make SClubs King;
+      Card.make SDiamonds Ace;
+    ]
+  in
+  let combinations = find_best_combination cards in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {|
+    (Defs.Carre Defs.Queen)
+    |}]
+
+let%expect_test "find_best_combination:1 carre & 1 unrelated combo" =
+  let cards =
+    [
+      Card.make SClubs Queen;
+      Card.make SSpades Queen;
+      Card.make SHearts Queen;
+      Card.make SDiamonds Queen;
+      Card.make SHearts Seven;
+      Card.make SHearts Eight;
+      Card.make SHearts Nine;
+      Card.make SHearts Ten;
+    ]
+  in
+  let combinations = find_best_combination cards in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {|
+    (Defs.Carre Defs.Queen)
+    (Defs.Quarte Defs.Seven)
+    |}]
+
+let%expect_test "find_best_combination:1 carre & 1 affected combo" =
+  let cards =
+    [
+      Card.make SClubs Queen;
+      Card.make SSpades Queen;
+      Card.make SDiamonds Queen;
+      Card.make SHearts Queen;
+      Card.make SHearts King;
+      Card.make SHearts Ace;
+      Card.make SHearts Jack;
+      Card.make SDiamonds Ace;
+    ]
+  in
+  let combinations = find_best_combination cards in
+  printf "%s"
+  @@ List.fold combinations ~init:"" ~f:(fun acc el ->
+         sprintf "%s\n%s" acc (show_ccombination el));
+  [%expect {| (Defs.Carre Defs.Queen) |}]
+
+let%expect_test "find_best_combination:no carre & 2 combo" =
+  let cards =
+    [
+      Card.make SHearts Seven;
+      Card.make SHearts Eight;
+      Card.make SHearts Nine;
+      Card.make SHearts Ten;
+      Card.make SHearts Jack;
+      Card.make SHearts Queen;
+      Card.make SHearts King;
+      Card.make SHearts Ace;
+    ]
+  in
+  let combinations = find_best_combination cards in
   printf "%s"
   @@ List.fold combinations ~init:"" ~f:(fun acc el ->
          sprintf "%s\n%s" acc (show_ccombination el));
