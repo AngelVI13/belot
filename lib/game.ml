@@ -3,6 +3,7 @@ open Defs
 open! Poly
 open! Cards
 open! Bid
+open! Utils
 
 type game_state =
   | SShuffle
@@ -141,54 +142,55 @@ let announce_combination player =
   let combos = find_best_combination cards in
   Player.store_combos player combos
 
-let play_trick players player_idx =
-  let rec play_trick_aux players player_idx new_players hand =
-    if List.length hand = 4 then (new_players, hand)
+let play_trick players =
+  let rec play_trick_aux players new_players hand =
+    match players with
+    | player :: players ->
+        let player, card = Player.play_card player in
+
+        (* keep hand cards in order *)
+        let hand = hand @ [ card ] in
+        let new_players = new_players @ [ player ] in
+        play_trick_aux players new_players hand
+    | [] -> (new_players, hand)
+  in
+
+  play_trick_aux players [] []
+
+let play_round players =
+  let rec play_round_aux players trick_num =
+    if trick_num = 1 then players (* TODO: revert to 8 later *)
     else
-      let player = List.nth_exn players player_idx in
-      let player, card = Player.play_card player in
-
-      (* keep hand cards in order *)
-      let hand = hand @ [ card ] in
-      let new_players = new_players @ [ player ] in
-      let next_player = next_player_idx player_idx in
-      play_trick_aux players next_player new_players hand
+      (* TODO: compute winner of hand and update player points after this ? *)
+      let players, hand = play_trick players in
+      (* TODO: rotate the players so that the player that won the hand is at idx 0 *)
+      let _ = hand in
+      play_round_aux players (trick_num + 1)
   in
 
-  play_trick_aux players player_idx [] []
+  play_round_aux players 0
 
-let one_rot l =
-  let rec iterate acc = function
-    | [] -> []
-    | [ x ] -> x :: List.rev acc
-    | x :: l -> iterate (x :: acc) l
-  in
-  iterate [] l
+let do_play game =
+  let players = game.players in
+  let start_player_idx = next_player_idx game.dealer_idx in
 
-let rec rotate n l = match n with 0 -> l | _ -> rotate (n - 1) (one_rot l)
-(* TODO: test if this works for rotating the players after play_trick *)
+  (* NOTE: rotate the players so that the players whose turn it is is in List idx 0
+     For example, if players are [South; East; North; West], we rotate left to obtain
+     [East; North; West; South]
+  *)
+  let players = rotate (List.length players - start_player_idx) players in
 
-let rec play_round game trick_num =
-  if trick_num = 8 then game
-  else
-    let players =
-      match trick_num with
-      | 0 -> List.map game.players ~f:announce_combination
-      | _ -> game.players
-    in
-    (* TODO: the dealer_idx+1 should be used only for the first trick, afterwards its whoever won the last trick *)
-    let start_player_idx = next_player_idx game.dealer_idx in
-    let new_players, hand = play_trick game.players start_player_idx in
-    (* TODO: the order of new players is not the same as game.players - FIX IT *)
-    let _, _ = (new_players, hand) in
-    let game = { game with players } in
-    play_round game (trick_num + 1)
+  let players = List.map players ~f:announce_combination in
+  let players = play_round players in
+
+  (* NOTE: rotate players (right) back to their original order i.e.
+     [South; East; North; West]. Dealer index is updated in shuffle stage.
+  *)
+  let players = rotate start_player_idx players in
+
+  { game with players; state = SCalcScore }
 
 (* TODO: implement these *)
-let do_play game =
-  let game = play_round game 0 in
-  { game with state = SCalcScore }
-
 let do_calc_score game = { game with state = SShuffle }
 
 let rec play game =
@@ -211,6 +213,12 @@ let test_setup_do_bidding deck =
   let game = { game with state = SBidding; players; deck } in
   let game = do_bidding game in
   game
+
+(*let test_setup_do_play deck chosen_game =*)
+(*  let game = make |> do_shuffle in*)
+(*  let players, deck = deal_cards game.players 8 (Deck.of_cards deck) [] in*)
+(*  let game = { game with state = SPlay; players; deck; chosen_game } in*)
+(*  game*)
 
 let%expect_test "do_bidding_1" =
   let test_deck =
@@ -312,7 +320,8 @@ let%expect_test "do_bidding_1" =
     Name:Defs.South
     Type:Defs.Machine
     Pos:Defs.South
-    Partner:Defs.NorthPoints:0
+    Partner:Defs.North
+    Points:0
     Cards:
     { Card.suite = Defs.SSpades; value = Defs.Eight }
     { Card.suite = Defs.SSpades; value = Defs.Ten }
@@ -324,7 +333,8 @@ let%expect_test "do_bidding_1" =
     Name:Defs.East
     Type:Defs.Machine
     Pos:Defs.East
-    Partner:Defs.WestPoints:0
+    Partner:Defs.West
+    Points:0
     Cards:
     { Card.suite = Defs.SSpades; value = Defs.Jack }
     { Card.suite = Defs.SClubs; value = Defs.Jack }
@@ -336,7 +346,8 @@ let%expect_test "do_bidding_1" =
     Name:Defs.North
     Type:Defs.Machine
     Pos:Defs.North
-    Partner:Defs.SouthPoints:0
+    Partner:Defs.South
+    Points:0
     Cards:
     { Card.suite = Defs.SHearts; value = Defs.Ten }
     { Card.suite = Defs.SHearts; value = Defs.Ace }
@@ -348,7 +359,8 @@ let%expect_test "do_bidding_1" =
     Name:Defs.West
     Type:Defs.Machine
     Pos:Defs.West
-    Partner:Defs.EastPoints:0
+    Partner:Defs.East
+    Points:0
     Cards:
     { Card.suite = Defs.SDiamonds; value = Defs.Eight }
     { Card.suite = Defs.SSpades; value = Defs.Seven }
@@ -439,7 +451,8 @@ let%expect_test "do_bidding_2" =
     Name:Defs.South
     Type:Defs.Machine
     Pos:Defs.South
-    Partner:Defs.NorthPoints:0
+    Partner:Defs.North
+    Points:0
     Cards:
     { Card.suite = Defs.SHearts; value = Defs.Ace }
     { Card.suite = Defs.SDiamonds; value = Defs.Seven }
@@ -451,7 +464,8 @@ let%expect_test "do_bidding_2" =
     Name:Defs.East
     Type:Defs.Machine
     Pos:Defs.East
-    Partner:Defs.WestPoints:0
+    Partner:Defs.West
+    Points:0
     Cards:
     { Card.suite = Defs.SDiamonds; value = Defs.King }
     { Card.suite = Defs.SDiamonds; value = Defs.Ten }
@@ -463,7 +477,8 @@ let%expect_test "do_bidding_2" =
     Name:Defs.North
     Type:Defs.Machine
     Pos:Defs.North
-    Partner:Defs.SouthPoints:0
+    Partner:Defs.South
+    Points:0
     Cards:
     { Card.suite = Defs.SDiamonds; value = Defs.Ace }
     { Card.suite = Defs.SClubs; value = Defs.Seven }
@@ -475,7 +490,8 @@ let%expect_test "do_bidding_2" =
     Name:Defs.West
     Type:Defs.Machine
     Pos:Defs.West
-    Partner:Defs.EastPoints:0
+    Partner:Defs.East
+    Points:0
     Cards:
     { Card.suite = Defs.SDiamonds; value = Defs.Jack }
     { Card.suite = Defs.SSpades; value = Defs.Ten }
@@ -572,7 +588,8 @@ let%expect_test "do_bidding_3" =
     Name:Defs.South
     Type:Defs.Machine
     Pos:Defs.South
-    Partner:Defs.NorthPoints:0
+    Partner:Defs.North
+    Points:0
     Cards:
     { Card.suite = Defs.SClubs; value = Defs.Jack }
     { Card.suite = Defs.SSpades; value = Defs.Nine }
@@ -584,7 +601,8 @@ let%expect_test "do_bidding_3" =
     Name:Defs.East
     Type:Defs.Machine
     Pos:Defs.East
-    Partner:Defs.WestPoints:0
+    Partner:Defs.West
+    Points:0
     Cards:
     { Card.suite = Defs.SDiamonds; value = Defs.King }
     { Card.suite = Defs.SSpades; value = Defs.Ace }
@@ -596,7 +614,8 @@ let%expect_test "do_bidding_3" =
     Name:Defs.North
     Type:Defs.Machine
     Pos:Defs.North
-    Partner:Defs.SouthPoints:0
+    Partner:Defs.South
+    Points:0
     Cards:
     { Card.suite = Defs.SHearts; value = Defs.Nine }
     { Card.suite = Defs.SSpades; value = Defs.Queen }
@@ -608,7 +627,8 @@ let%expect_test "do_bidding_3" =
     Name:Defs.West
     Type:Defs.Machine
     Pos:Defs.West
-    Partner:Defs.EastPoints:0
+    Partner:Defs.East
+    Points:0
     Cards:
     { Card.suite = Defs.SDiamonds; value = Defs.Jack }
     { Card.suite = Defs.SClubs; value = Defs.Seven }
@@ -711,7 +731,8 @@ let%expect_test "do_bidding_4" =
     Name:Defs.South
     Type:Defs.Machine
     Pos:Defs.South
-    Partner:Defs.NorthPoints:0
+    Partner:Defs.North
+    Points:0
     Cards:
     { Card.suite = Defs.SClubs; value = Defs.Jack }
     { Card.suite = Defs.SHearts; value = Defs.Eight }
@@ -723,7 +744,8 @@ let%expect_test "do_bidding_4" =
     Name:Defs.East
     Type:Defs.Machine
     Pos:Defs.East
-    Partner:Defs.WestPoints:0
+    Partner:Defs.West
+    Points:0
     Cards:
     { Card.suite = Defs.SClubs; value = Defs.Nine }
     { Card.suite = Defs.SClubs; value = Defs.Jack }
@@ -735,7 +757,8 @@ let%expect_test "do_bidding_4" =
     Name:Defs.North
     Type:Defs.Machine
     Pos:Defs.North
-    Partner:Defs.SouthPoints:0
+    Partner:Defs.South
+    Points:0
     Cards:
     { Card.suite = Defs.SHearts; value = Defs.Nine }
     { Card.suite = Defs.SSpades; value = Defs.Queen }
@@ -747,7 +770,8 @@ let%expect_test "do_bidding_4" =
     Name:Defs.West
     Type:Defs.Machine
     Pos:Defs.West
-    Partner:Defs.EastPoints:0
+    Partner:Defs.East
+    Points:0
     Cards:
     { Card.suite = Defs.SDiamonds; value = Defs.Jack }
     { Card.suite = Defs.SDiamonds; value = Defs.Nine }
@@ -781,7 +805,8 @@ let%expect_test "announce_combination" =
     Name:Defs.South
     Type:Defs.Machine
     Pos:Defs.South
-    Partner:Defs.NorthPoints:0
+    Partner:Defs.North
+    Points:0
     Cards:
     { Card.suite = Defs.SClubs; value = Defs.Queen }
     { Card.suite = Defs.SSpades; value = Defs.Queen }
@@ -794,3 +819,72 @@ let%expect_test "announce_combination" =
     Combinations:
     (Defs.Carre Defs.Queen)
     |}]
+
+let%expect_test "rotate list" =
+  let print_list prefix l =
+    printf "%s: %s\n" prefix
+      (List.fold ~init:"" ~f:(fun acc el -> sprintf "%s;%d" acc el) l)
+  in
+
+  let x = [ 1; 2; 3; 4 ] in
+  print_list "before" x;
+
+  let rotate_amount = 1 in
+  let x = rotate rotate_amount x in
+  print_list "after" x;
+  [%expect {|
+    before: ;1;2;3;4
+    after: ;4;1;2;3
+    |}];
+
+  let x = rotate (List.length x - rotate_amount) x in
+  print_list "rotated back" x;
+  [%expect {| rotated back: ;1;2;3;4 |}]
+
+(*let%expect_test "do_play_1" =*)
+(*  let test_deck =*)
+(*    [*)
+(*      (* south *)*)
+(*      Card.make SDiamonds Eight;*)
+(*      Card.make SDiamonds Seven;*)
+(*      Card.make SClubs Queen;*)
+(*      Card.make SDiamonds Jack;*)
+(*      Card.make SClubs Ten;*)
+(*      Card.make SSpades Ten;*)
+(*      Card.make SHearts Ten;*)
+(*      Card.make SHearts King;*)
+(*      (* east *)*)
+(*      Card.make SHearts Jack;*)
+(*      Card.make SSpades Ace;*)
+(*      Card.make SClubs Ace;*)
+(*      Card.make SSpades Jack;*)
+(*      Card.make SClubs Seven;*)
+(*      Card.make SClubs Eight;*)
+(*      Card.make SDiamonds King;*)
+(*      Card.make SHearts Queen;*)
+(*      (* north *)*)
+(*      Card.make SHearts Ace;*)
+(*      Card.make SSpades Eight;*)
+(*      Card.make SClubs King;*)
+(*      Card.make SSpades King;*)
+(*      Card.make SDiamonds Nine;*)
+(*      Card.make SHearts Seven;*)
+(*      Card.make SHearts Nine;*)
+(*      Card.make SSpades Queen;*)
+(*      (* west *)*)
+(*      Card.make SClubs Nine;*)
+(*      Card.make SClubs Jack;*)
+(*      Card.make SHearts Eight;*)
+(*      Card.make SDiamonds Ten;*)
+(*      Card.make SSpades Nine;*)
+(*      Card.make SDiamonds Ace;*)
+(*      Card.make SDiamonds Queen;*)
+(*      Card.make SSpades Seven;*)
+(*    ]*)
+(*  in*)
+(*  let chosen_game = Bid.make_bid GClubs West CNo in*)
+(*  let game = test_setup_do_play test_deck (Some chosen_game) in*)
+(*  let game = do_play game in*)
+(**)
+(*  print_endline @@ show game;*)
+(*  [%expect {| |}]*)

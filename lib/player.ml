@@ -22,7 +22,8 @@ let show player =
      Name:%s\n\
      Type:%s\n\
      Pos:%s\n\
-     Partner:%sPoints:%d\n\
+     Partner:%s\n\
+     Points:%d\n\
      Cards:%s\n\
      Combinations:%s\n"
     player.name type_s pos_s partner_s player.points
