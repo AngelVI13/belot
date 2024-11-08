@@ -48,7 +48,19 @@ let new_round player = { player with cards = []; combinations = [] }
 let cards player = player.cards
 let pos player = player.pos
 
-let play_card player =
-  match player.cards with
-  | card :: cards -> ({ player with cards }, card)
-  | [] -> failwith "can't play a card, not enough cards"
+let remove_card_by_idx player idx =
+  let card = List.nth_exn player.cards idx in
+  let cards = List.filteri player.cards ~f:(fun i _ -> i <> idx) in
+  ({ player with cards }, card)
+
+let play_card player chosen_game current_hand =
+  let _ = chosen_game in
+  match current_hand with
+  (* if nothing has been played -> play the first card you have *)
+  | [] -> remove_card_by_idx player 0
+  | hand_card :: hand_cards ->
+      (* TODO: finish this: If you have a card of the same suite as hand_card -> play it
+         else if it is a color game -> play a trump card. If you dont have a trump
+         card or its not a color game -> play anything else *)
+      let _, _ = (hand_card, hand_cards) in
+      remove_card_by_idx player 0 (* todo remove this *)

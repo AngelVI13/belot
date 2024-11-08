@@ -12,6 +12,7 @@ let raiseBidScore = 0.70
 let counterBidScore = 0.75
 let raisePartnerNoTrumpsScore = 0.85
 
+(* TODO: make this a module ??? *)
 type bid = { game : cgame; bidder : player_pos; counter : ccounter }
 [@@deriving show]
 

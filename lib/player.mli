@@ -1,4 +1,6 @@
 open Defs
+open Bid
+
 type t
 
 val make: player_pos -> t
@@ -8,4 +10,4 @@ val store_combos: t -> ccombination list -> t
 val cards: t -> Card.t list
 val new_round: t -> t
 val pos: t -> player_pos
-val play_card: t -> t * Card.t
+val play_card: t -> bid -> Card.t list -> t * Card.t

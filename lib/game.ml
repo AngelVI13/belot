@@ -142,11 +142,11 @@ let announce_combination player =
   let combos = find_best_combination cards in
   Player.store_combos player combos
 
-let play_trick players =
+let play_trick players chosen_game =
   let rec play_trick_aux players new_players hand =
     match players with
     | player :: players ->
-        let player, card = Player.play_card player in
+        let player, card = Player.play_card player chosen_game hand in
 
         (* keep hand cards in order *)
         let hand = hand @ [ card ] in
@@ -157,12 +157,12 @@ let play_trick players =
 
   play_trick_aux players [] []
 
-let play_round players =
+let play_round players chosen_game =
   let rec play_round_aux players trick_num =
     if trick_num = 1 then players (* TODO: revert to 8 later *)
     else
       (* TODO: compute winner of hand and update player points after this ? *)
-      let players, hand = play_trick players in
+      let players, hand = play_trick players chosen_game in
       (* TODO: rotate the players so that the player that won the hand is at idx 0 *)
       let _ = hand in
       play_round_aux players (trick_num + 1)
@@ -172,6 +172,11 @@ let play_round players =
 
 let do_play game =
   let players = game.players in
+  let chosen_game =
+    match game.chosen_game with
+    | Some g -> g
+    | None -> failwith "must have a chosen game to play round"
+  in
   let start_player_idx = next_player_idx game.dealer_idx in
 
   (* NOTE: rotate the players so that the players whose turn it is is in List idx 0
@@ -181,7 +186,7 @@ let do_play game =
   let players = rotate (List.length players - start_player_idx) players in
 
   let players = List.map players ~f:announce_combination in
-  let players = play_round players in
+  let players = play_round players chosen_game in
 
   (* NOTE: rotate players (right) back to their original order i.e.
      [South; East; North; West]. Dealer index is updated in shuffle stage.
