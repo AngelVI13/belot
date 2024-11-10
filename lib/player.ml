@@ -1,5 +1,7 @@
 open Core
 open Defs
+open! Poly
+open! Bid
 
 type t = {
   name : string;
@@ -54,13 +56,42 @@ let remove_card_by_idx player idx =
   ({ player with cards }, card)
 
 let play_card player chosen_game current_hand =
-  let _ = chosen_game in
   match current_hand with
   (* if nothing has been played -> play the first card you have *)
   | [] -> remove_card_by_idx player 0
-  | hand_card :: hand_cards ->
-      (* TODO: finish this: If you have a card of the same suite as hand_card -> play it
-         else if it is a color game -> play a trump card. If you dont have a trump
-         card or its not a color game -> play anything else *)
-      let _, _ = (hand_card, hand_cards) in
-      remove_card_by_idx player 0 (* todo remove this *)
+  | hand_card :: hand_cards -> (
+      let _ = hand_cards in
+      match chosen_game.game with
+      | GClubs | GDiamonds | GHearts | GSpades -> remove_card_by_idx player 0
+      | GNoTrumps -> (
+          let target_suite = Card.suite hand_card in
+          let card_same_suite =
+            List.findi player.cards ~f:(fun _ card ->
+                Card.suite card = target_suite)
+          in
+          match card_same_suite with
+          | Some (idx, _) -> remove_card_by_idx player idx
+          | None -> remove_card_by_idx player 0)
+      | GAllTrumps ->
+          let target_suite = Card.suite hand_card in
+          let current_hand_target_suite =
+            List.filter current_hand ~f:(fun c -> Card.suite c = target_suite)
+          in
+          let current_hand_by_power =
+            List.sort current_hand_target_suite ~compare:(fun c1 c2 ->
+                let c1_int = cvalue_to_enum @@ Card.value c1 in
+                let c2_int = cvalue_to_enum @@ Card.value c2 in
+                if c1_int < c2_int then 1 else if c1_int = c2_int then 0 else -1)
+          in
+          let highest_value =
+            Card.value @@ List.nth_exn current_hand_by_power 0
+          in
+          (* TODO: finish this. check if we have higher value of target suite
+             than the highest_value
+             if yes -> return it
+             if no -> return first random card *)
+          let _ = highest_value in
+          remove_card_by_idx player 0)
+(* TODO: finish this: If you have a card of the same suite as hand_card -> play it
+   else if it is a color game -> play a trump card. If you dont have a trump
+   card or its not a color game -> play anything else *)
