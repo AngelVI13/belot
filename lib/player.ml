@@ -2,6 +2,7 @@ open Core
 open Defs
 open! Poly
 open! Bid
+open! Cards
 
 type t = {
   name : string;
@@ -74,23 +75,18 @@ let play_card player chosen_game current_hand =
           | None -> remove_card_by_idx player 0)
       | GAllTrumps ->
           let target_suite = Card.suite hand_card in
-          let current_hand_target_suite =
-            List.filter current_hand ~f:(fun c -> Card.suite c = target_suite)
-          in
           let current_hand_by_power =
-            List.sort current_hand_target_suite ~compare:(fun c1 c2 ->
-                let c1_int = cvalue_to_enum @@ Card.value c1 in
-                let c2_int = cvalue_to_enum @@ Card.value c2 in
-                if c1_int < c2_int then 1 else if c1_int = c2_int then 0 else -1)
+            descending_by_suite current_hand target_suite
           in
-          let highest_value =
-            Card.value @@ List.nth_exn current_hand_by_power 0
+          let highest_value = List.nth_exn current_hand_by_power 0 in
+          let my_cards_bigger_by_suite =
+            bigger_by_suite player.cards target_suite (Card.value highest_value)
           in
           (* TODO: finish this. check if we have higher value of target suite
              than the highest_value
              if yes -> return it
              if no -> return first random card *)
-          let _ = highest_value in
+          let _ = my_cards_bigger_by_suite in
           remove_card_by_idx player 0)
 (* TODO: finish this: If you have a card of the same suite as hand_card -> play it
    else if it is a color game -> play a trump card. If you dont have a trump

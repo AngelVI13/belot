@@ -121,6 +121,29 @@ let find_best_combination cards =
       carre @ consec
   | _ -> failwith (sprintf "allowed carre combos [0, 2] but got %d" num_carre)
 
+let descending_by_suite cards suite =
+  let cards_target_suite =
+    List.filter cards ~f:(fun c -> Card.suite c = suite)
+  in
+  (* sort in descending order (highest value first) *)
+  let cards_by_power =
+    List.rev @@ List.sort cards_target_suite ~compare:Card.compare_by_value
+  in
+  cards_by_power
+
+let bigger_by_suite cards suite value =
+  let rec bigger_by_suite_aux cards suite value bigger =
+    match cards with
+    | card :: cards ->
+        if Card.value card > value then
+          bigger_by_suite_aux cards suite value (card :: bigger)
+        else bigger
+    | [] -> bigger
+  in
+
+  let descending = descending_by_suite cards suite in
+  bigger_by_suite_aux descending suite value []
+
 let%expect_test "find_carre_combinations:no carre" =
   let cards =
     [
