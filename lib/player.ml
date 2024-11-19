@@ -56,6 +56,12 @@ let remove_card_by_idx player idx =
   let cards = List.filteri player.cards ~f:(fun i _ -> i <> idx) in
   ({ player with cards }, card)
 
+let remove_card player card =
+  let cards =
+    List.filter player.cards ~f:(fun c -> Card.compare_by_value c card <> 0)
+  in
+  ({ player with cards }, card)
+
 let play_card player chosen_game current_hand =
   match current_hand with
   (* if nothing has been played -> play the first card you have *)
@@ -63,7 +69,11 @@ let play_card player chosen_game current_hand =
   | hand_card :: hand_cards -> (
       let _ = hand_cards in
       match chosen_game.game with
-      | GClubs | GDiamonds | GHearts | GSpades -> remove_card_by_idx player 0
+      | GClubs | GDiamonds | GHearts | GSpades ->
+          let is_trump = Card.is_trump_by_game hand_card chosen_game.game in
+          (* TODO: we should not only check for the first card by any other card could also be trump *)
+          let _ = is_trump in
+          remove_card_by_idx player 0
       | GNoTrumps -> (
           let target_suite = Card.suite hand_card in
           let card_same_suite =
@@ -73,7 +83,7 @@ let play_card player chosen_game current_hand =
           match card_same_suite with
           | Some (idx, _) -> remove_card_by_idx player idx
           | None -> remove_card_by_idx player 0)
-      | GAllTrumps ->
+      | GAllTrumps -> (
           let target_suite = Card.suite hand_card in
           let current_hand_by_power =
             descending_by_suite current_hand target_suite
@@ -82,12 +92,21 @@ let play_card player chosen_game current_hand =
           let my_cards_bigger_by_suite =
             bigger_by_suite player.cards target_suite (Card.value highest_value)
           in
-          (* TODO: finish this. check if we have higher value of target suite
-             than the highest_value
-             if yes -> return it
-             if no -> return first random card *)
-          let _ = my_cards_bigger_by_suite in
-          remove_card_by_idx player 0)
+          (* If i have bigger card that any of the cards on the table -> play it *)
+          match my_cards_bigger_by_suite with
+          | card :: _ -> remove_card player card
+          | [] ->
+              (* if i have a card of the same suite -> play it *)
+              let my_cards_target_suite =
+                descending_by_suite player.cards target_suite
+              in
+              let card =
+                match my_cards_target_suite with
+                | c :: _ -> c
+                (* play a random card *)
+                | [] -> List.nth_exn player.cards 0
+              in
+              remove_card player card))
 (* TODO: finish this: If you have a card of the same suite as hand_card -> play it
    else if it is a color game -> play a trump card. If you dont have a trump
    card or its not a color game -> play anything else *)
